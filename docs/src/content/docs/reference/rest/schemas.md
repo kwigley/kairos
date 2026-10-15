@@ -2071,6 +2071,7 @@ The `filter` capability. Fields are AND with each other; array values are OR wit
 |---|---|---|---|
 | `board` | `string`, nullable | no | Restrict to items on this board, by slug or UUID (KAIROS-T-0368). Not with `board_id`. |
 | `board_id` | `string`, nullable | no | Restrict to items on this board (UUID; excludes documents, which do not live on boards). Not with `board`. |
+| `claimed_by` | `string`, nullable | no | Only the tasks that this person has a claim on: `"me"` (the caller) or the id of a person (UUID). Excludes each other type. |
 | `column_id` | `string`, nullable | no | Restrict to items in this board column (UUID; excludes documents). |
 | `created_after` | `string`, nullable | no | Only items created strictly after this instant (RFC 3339). |
 | `created_before` | `string`, nullable | no | Only items created strictly before this instant (RFC 3339). |
@@ -2079,6 +2080,7 @@ The `filter` capability. Fields are AND with each other; array values are OR wit
 | `is_bucket` | `boolean`, nullable | no | Restrict to (non-)bucket initiatives (initiative-level attribute; other entity types are excluded). |
 | `metadata` | `object`, nullable | no | Metadata conditions keyed by definition slug; string values support trailing-`*` globs (e.g. `"component": "auth*"`). All entries must match (AND). |
 | `metadata_missing` | `array`, nullable | no | Only items with NO value for each of these metadata definitions, by slug (KAIROS-T-0368): "bugs without a priority" is `["priority"]`. An unknown slug is refused. |
+| `owner` | `string`, nullable | no | Only the strategies and the initiatives that this person owns: `"me"` (the caller) or the id of a person (UUID). Excludes each other type. |
 | `repository` | `string`, nullable | no | Restrict to the items of this repository (slug or UUID of a live repository — KAIROS-T-0115 made every repository reference on the wire the same shape; the old name `repository_id` is refused, COLLIERY-T-0259). The items of a repository are the tasks that link to it, and the documents and the ADRs that impact it (COLLIERY-T-0269). Strategies and initiatives are excluded. With `team_id`, `task_type` or `work_class`, only tasks match. |
 | `task_type` | `array`, nullable | no | Restrict to tasks of these types (`task|bug|tech_debt|support`; excludes non-task entities). |
 | `team` | `string`, nullable | no | Restrict to tasks of this team, by slug or UUID (KAIROS-T-0368). Not with `team_id`. |
@@ -2110,6 +2112,7 @@ Response of `POST /api/search`: results grouped by entity type plus the paginati
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `blocks_summary` | `object` | yes | The open `blocks` edges of each item of the page, keyed by short code, as on the items of a board. An item with no open edge has no entry. The server sends it in each response, so the schema shows it as required. The default is for the client only. |
 | `limit` | `integer` | yes | The applied page size. |
 | `offset` | `integer` | yes | The applied offset. |
 | `results` | [`SearchResultGroups`](#searchresultgroups) | yes | Matches grouped by entity type; empty groups are omitted from the JSON. |

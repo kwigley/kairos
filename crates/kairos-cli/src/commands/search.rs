@@ -70,6 +70,14 @@ pub struct SearchArgs {
     /// repeatable, e.g. --metadata-missing priority
     #[arg(long, value_name = "SLUG")]
     pub metadata_missing: Vec<String>,
+    /// Only the tasks that this person has a claim on: "me" or the id of a
+    /// person
+    #[arg(long, value_name = "PERSON")]
+    pub claimed_by: Option<String>,
+    /// Only the strategies and initiatives that this person owns: "me" or
+    /// the id of a person
+    #[arg(long, value_name = "PERSON")]
+    pub owner: Option<String>,
     /// Include archived (soft-deleted) items; composes with --query and
     /// --from, and archived hits are marked
     #[arg(long)]
@@ -186,6 +194,8 @@ impl SearchArgs {
             || self.updated_after.is_some()
             || self.updated_before.is_some()
             || !self.metadata_missing.is_empty()
+            || self.claimed_by.is_some()
+            || self.owner.is_some()
             || self.include_deleted;
         let filter = has_filter.then(|| SearchFilter {
             entity_type: non_empty(&self.entity_type),
@@ -204,6 +214,8 @@ impl SearchArgs {
             updated_after: self.updated_after.clone(),
             updated_before: self.updated_before.clone(),
             metadata_missing: non_empty(&self.metadata_missing),
+            claimed_by: self.claimed_by.clone(),
+            owner: self.owner.clone(),
             include_deleted: self.include_deleted,
         });
 
@@ -366,6 +378,7 @@ mod tests {
             before: Some("2026-03-01T00:00:00Z".into()),
             updated_before: Some("2026-02-01T00:00:00Z".into()),
             metadata_missing: vec!["priority".into()],
+            claimed_by: Some("me".into()),
             sort: Some("updated_at".into()),
             limit: Some(10),
             ..Default::default()
@@ -389,6 +402,8 @@ mod tests {
             Some(&["priority".to_string()][..])
         );
         assert_eq!(filter.task_type.as_deref(), Some(&["bug".to_string()][..]));
+        assert_eq!(filter.claimed_by.as_deref(), Some("me"));
+        assert_eq!(filter.owner, None);
         let metadata = filter.metadata.expect("metadata");
         assert_eq!(metadata["priority"], "critical");
         assert_eq!(metadata["component"], "auth*");

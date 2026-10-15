@@ -25,7 +25,8 @@ kairos whoami
 request with an agent key cannot make an agent key.
 
 Sometimes `kairos login` does not work, for example with Google as the issuer.
-Then sign in to the web app, and do step 2 on the **Agent keys** page.
+Then sign in to the web app, and do step 2 on the tab **Agent keys** of your profile. To open it, select your
+name in the top bar.
 
 ## 2. Make the key
 
@@ -39,7 +40,8 @@ kairos keys create --name laptop-claude-code
 # Keep the key in a safe place now. Kairos does NOT show it again.
 ```
 
-You can also make the key on the **Agent keys** page of the GUI.
+You can also make the key in the GUI. Select your name in the top bar, then
+the tab **Agent keys**.
 
 A new key expires after 90 days, unless the operator changed
 `KAIROS_API_KEY_TTL_DAYS`. The option `--expires-at 2027-01-01T00:00:00Z` sets
@@ -95,7 +97,7 @@ first. Put the new key in the settings of the agent. Then revoke the old key.
 A key with no expiry works until a person revokes it. These persons can revoke
 your key:
 
-- You, with `kairos keys revoke` or on the **Agent keys** page.
+- You, with `kairos keys revoke` or on the tab **Agent keys** of your profile.
 - An organization admin, with `kairos admin agent-keys revoke <KEY_ID> --confirm`
   or in the section **Agent keys of the people** of the page **Admin >
   Members**. Kairos then gives you a notification that names the key.
@@ -119,7 +121,7 @@ kairos whoami
 The CLI also reads `KAIROS_MCP_KEY`, so a shell that has the variable of
 Claude Code needs only `KAIROS_URL`. When a key is set, it wins over a login.
 Unset it to use the login again. The key cannot make or revoke agent keys:
-use your login or the **Agent keys** page for that.
+use your login or your profile for that.
 
 ## What you cannot do
 

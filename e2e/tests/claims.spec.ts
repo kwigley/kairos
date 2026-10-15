@@ -9,7 +9,8 @@
 //   4. Release ends the claim;
 //   5. Cancel with a reason puts the cancel mark on the task;
 //   6. Delete for good (a board manager) removes the task;
-//   7. the Agent keys page makes a key, rotates it and revokes it.
+//   7. the Agent keys tab of the profile makes a key, rotates it and
+//      revokes it.
 //
 // The task is new for each run (a timestamped title), so a retry starts
 // clean.
@@ -148,11 +149,12 @@ test('a task is claimed, handed off, released, cancelled and deleted', async ({
   });
 });
 
-test('the Agent keys page makes a key, rotates it and revokes it', async ({ page }) => {
+test('the Agent keys tab makes a key, rotates it and revokes it', async ({ page }) => {
   const name = `e2e-key-${Date.now()}`;
   await test.step('login via Dex as alice', () => login(page));
-  await page.locator('a[href="/agent-keys"]').first().click();
-  await page.waitForURL(/\/agent-keys/);
+  await page.locator('a[href="/me/profile"]').first().click();
+  await page.getByRole('tab', { name: 'Agent keys', exact: true }).click();
+  await page.waitForURL(/\/me\/profile\?tab=agent-keys/);
 
   await test.step('make a key: the secret shows once', async () => {
     await page.getByLabel('Name', { exact: true }).fill(name);

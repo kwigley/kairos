@@ -116,11 +116,12 @@ test('a hand-off to alice shows in her bell, and Mark read clears it', async ({ 
     expect(list.unread).toBe(before);
   });
 
-  await test.step('the Notifications page has the settings', async () => {
-    await page.goto('/notifications');
+  await test.step('the profile has the notification settings', async () => {
+    await page.goto('/me/profile?tab=notifications');
     const settings = page.locator('[data-testid="notification-settings"]');
     await expect(settings).toBeVisible();
     await expect(settings).toContainText('A person hands off a task to you');
+    await page.goto('/notifications');
   });
 
   await test.step('Mark all read on the page clears the bell', async () => {

@@ -192,7 +192,7 @@ pub fn on_agent_key_revoked(
 ) -> Result<(), DieselError> {
     let text = format!(
         "{} revoked your agent key {name} ({prefix}). The key does not work now. \
-         Make a new key on the Agent keys page.",
+         Make a new key on the tab Agent keys of your profile.",
         name_of(conn, actor)?
     );
     notify(

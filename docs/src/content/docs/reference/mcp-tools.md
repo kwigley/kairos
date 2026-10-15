@@ -701,6 +701,8 @@ are compact and grouped by type.
 | `updated_after` | RFC 3339 string | no | — | Items with a last change strictly after. |
 | `updated_before` | RFC 3339 string | no | — | Items with a last change strictly before. Must be later than `updated_after`. For the items with no change in 90 days, send the time 90 days ago. |
 | `metadata_missing` | array of string | no | — | Items with no value for each of these metadata-definition slugs. Must not be empty, and each slug must name a definition. |
+| `claimed_by` | string | no | — | Tasks that this person has a claim on: `me` (you) or the UUID of a person. Gives tasks only. |
+| `owner` | string | no | — | Strategies and initiatives that this person owns: `me` (you) or the UUID of a person. Gives strategies and initiatives only. |
 | `include_deleted` | boolean | no | `false` | Include archived items, marked `[archived]`. Composes with everything, `q` and `traverse` included, and counts on its own as a constraining filter. |
 
 `filter.repository` gives three types of item:
@@ -712,6 +714,10 @@ are compact and grouped by type.
 The filter gives no strategy and no initiative. With `team_id`, `task_type` or
 `work_class`, only tasks match. `entity_type` makes the result smaller, as for
 each filter.
+
+Your own work is two calls. `{"filter": {"claimed_by": "me"}}` gives the
+tasks that you have a claim on. `{"filter": {"owner": "me"}}` gives the
+strategies and the initiatives that you own.
 
 A triage pass reads the bugs with no priority and no change in 90 days with
 one call:
@@ -743,7 +749,8 @@ repository, so `impacts` is not a value of `relationships`. Use
 
 Refuses: `VALIDATION` for a blank `q`, an empty enum array, a blank metadata
 key, an inverted date range, an empty `metadata_missing` or a slug in it that
-names no definition, `board` with `board_id`, `team` with `team_id`, an
+names no definition, a `claimed_by` or an `owner` that is not `me` and not a
+UUID, `board` with `board_id`, `team` with `team_id`, an
 unknown `board` or `team`, a
 missing `traverse.depth`, a `depth` of 0 or above 10, an empty
 `relationships`, a request with no query, no constraining filter and no

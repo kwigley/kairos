@@ -49,6 +49,7 @@ use crate::app::AppState;
 use crate::body::ApiJson;
 use crate::error::ApiError;
 use crate::input::ApiQuery;
+use crate::middleware::auth::AuthContext;
 use crate::middleware::tenant::TenantContext;
 
 pub fn router() -> Router<AppState> {
@@ -170,6 +171,7 @@ pub(crate) struct RelatedQuery {
 )]
 pub(crate) async fn search(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Extension(tenant): Extension<TenantContext>,
     ApiJson(body): ApiJson<serde_json::Value>,
 ) -> Result<Json<dto_search::SearchResponse>, ApiError> {
@@ -178,7 +180,7 @@ pub(crate) async fn search(
     // (COLLIERY-T-0249). The message names an unknown field.
     let request: dto_search::SearchRequest = serde_json::from_value(body)
         .map_err(|e| crate::body::shape_error(StatusCode::BAD_REQUEST, &e.to_string()))?;
-    let mut core = to_core(&request)?;
+    let mut core = to_core(&request, auth.user_id)?;
     let refs = FilterRefs::of(request.filter.as_ref())?;
     // Validate before dispatching to the blocking pool: an invalid request
     // never costs a connection checkout. A filter carrying only
@@ -206,10 +208,37 @@ pub(crate) async fn search(
             // each ADR, one query for each of the two types.
             super::convert::attach_impacts(conn, &mut response.results.documents)?;
             super::convert::attach_impacts(conn, &mut response.results.adrs)?;
+            attach_work_state(conn, &mut response)?;
             Ok(response)
         })
         .await?;
     Ok(Json(response))
+}
+
+/// Put on the hits what a person needs to see the state of the work: the
+/// claim of each task, the owner of each strategy and initiative, and the
+/// open `blocks` edges of each item (`blocks_summary`). Seven queries at
+/// most for the page, whatever its size.
+fn attach_work_state(
+    conn: &mut diesel::pg::PgConnection,
+    response: &mut dto_search::SearchResponse,
+) -> Result<(), ApiError> {
+    let groups = &mut response.results;
+    crate::claims::attach_claims(conn, &mut groups.tasks).map_err(ApiError::internal)?;
+    crate::owners::attach_owners(conn, &mut groups.strategies)?;
+    crate::owners::attach_owners(conn, &mut groups.initiatives)?;
+    let items: Vec<(Uuid, String)> = groups
+        .strategies
+        .iter()
+        .map(|i| (&i.id, &i.short_code))
+        .chain(groups.initiatives.iter().map(|i| (&i.id, &i.short_code)))
+        .chain(groups.tasks.iter().map(|i| (&i.id, &i.short_code)))
+        .chain(groups.documents.iter().map(|i| (&i.id, &i.short_code)))
+        .chain(groups.adrs.iter().map(|i| (&i.id, &i.short_code)))
+        .filter_map(|(id, code)| id.parse().ok().map(|id| (id, code.clone())))
+        .collect();
+    response.blocks_summary = super::convert::blocks_summary(conn, &items)?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -359,6 +388,20 @@ fn uuid_field(value: &str, field: &str) -> Result<Uuid, ApiError> {
     })
 }
 
+/// A person of the filter: `"me"` is the caller, and each other value is
+/// the id of a person (UUID).
+pub(crate) fn person_field(value: &str, field: &str, caller: Uuid) -> Result<Uuid, ApiError> {
+    if value.trim().eq_ignore_ascii_case("me") {
+        return Ok(caller);
+    }
+    Uuid::parse_str(value.trim()).map_err(|_| {
+        field_invalid(
+            field,
+            format!("The value {value:?} of {field} is not \"me\" or the id of a person (UUID)."),
+        )
+    })
+}
+
 /// Parse an RFC 3339 timestamp field.
 fn timestamp_field(value: &str, field: &str) -> Result<DateTime<Utc>, ApiError> {
     DateTime::parse_from_rfc3339(value)
@@ -392,10 +435,17 @@ fn enum_field<T: serde::de::DeserializeOwned>(
 /// Convert the wire request into the typed `kairos_core::search` request.
 /// Malformed values are field-level 400s; structural rules (at least one
 /// capability, depth required/capped, ...) are `validate`'s job afterwards.
-fn to_core(request: &dto_search::SearchRequest) -> Result<core_search::SearchRequest, ApiError> {
+fn to_core(
+    request: &dto_search::SearchRequest,
+    caller: Uuid,
+) -> Result<core_search::SearchRequest, ApiError> {
     Ok(core_search::SearchRequest {
         q: request.q.clone(),
-        filter: request.filter.as_ref().map(filter_to_core).transpose()?,
+        filter: request
+            .filter
+            .as_ref()
+            .map(|filter| filter_to_core(filter, caller))
+            .transpose()?,
         traverse: request
             .traverse
             .as_ref()
@@ -409,6 +459,7 @@ fn to_core(request: &dto_search::SearchRequest) -> Result<core_search::SearchReq
 
 fn filter_to_core(
     filter: &dto_search::SearchFilter,
+    caller: Uuid,
 ) -> Result<core_search::SearchFilter, ApiError> {
     let entity_type = filter
         .entity_type
@@ -491,6 +542,16 @@ fn filter_to_core(
             .map(|v| timestamp_field(v, "filter.updated_before"))
             .transpose()?,
         metadata_missing: filter.metadata_missing.clone(),
+        claimed_by: filter
+            .claimed_by
+            .as_deref()
+            .map(|v| person_field(v, "filter.claimed_by", caller))
+            .transpose()?,
+        owner: filter
+            .owner
+            .as_deref()
+            .map(|v| person_field(v, "filter.owner", caller))
+            .transpose()?,
         include_deleted: filter.include_deleted,
     })
 }
@@ -625,5 +686,6 @@ fn into_response(results: SearchResults) -> dto_search::SearchResponse {
         total: results.total,
         limit: results.limit,
         offset: results.offset,
+        blocks_summary: Default::default(),
     }
 }

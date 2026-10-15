@@ -285,6 +285,39 @@ pub fn attach_impacts<T: HasImpacts>(
     Ok(())
 }
 
+/// The open `blocks` edges of `items` (id, short code), keyed by short code
+/// as the wire type (KAIROS-T-0091, COLLIERY-T-0214). One grouped query. An
+/// item with no open edge has no entry. The board items and the search give
+/// this map.
+pub fn blocks_summary(
+    conn: &mut PgConnection,
+    items: &[(Uuid, String)],
+) -> Result<
+    std::collections::BTreeMap<String, kairos_client::types_org::BlocksCounts>,
+    crate::error::ApiError,
+> {
+    if items.is_empty() {
+        return Ok(Default::default());
+    }
+    let ids: Vec<Uuid> = items.iter().map(|(id, _)| *id).collect();
+    let counts =
+        kairos_db::graph::blocks_summary(conn, &ids).map_err(crate::error::ApiError::internal)?;
+    Ok(items
+        .iter()
+        .filter_map(|(id, code)| {
+            counts.get(id).map(|counts| {
+                (
+                    code.clone(),
+                    kairos_client::types_org::BlocksCounts {
+                        blocked_by: counts.blocked_by,
+                        blocks: counts.blocks,
+                    },
+                )
+            })
+        })
+        .collect())
+}
+
 /// Single-item convenience over [`attach_impacts`].
 pub fn attach_impact<T: HasImpacts>(
     conn: &mut PgConnection,

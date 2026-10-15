@@ -8,6 +8,8 @@
 //! | `/login`        | explicit sign-in     | here       |
 //! | `/callback`     | PKCE redirect target | here       |
 //! | `/`             | redirect → `/boards` | here       |
+//! | `/me`           | my work              | here       |
+//! | `/me/profile`   | the person and the settings (`?tab=`) | here |
 //! | `/boards`       | board list           | T-0040     |
 //! | `/boards/:board`| board view           | T-0040     |
 //! | `/items/:code`  | item detail          | T-0041     |
@@ -27,7 +29,7 @@
 //! | `/admin/metadata`  | metadata definitions CRUD | T-0043 |
 //! | `/activity`     | activity feed        | T-0044     |
 //! | `/activity/history/:code` | item content history | T-0044 |
-//! | `/agent-keys`   | the agent keys of the person | T-0359 |
+//! | `/agent-keys`   | redirect → `/me/profile?tab=agent-keys` | here |
 //!
 //! Everything under the shell is auth-guarded: no session → the guard
 //! *redirects to the issuer* (A-0015 "unauthenticated hits show the login
@@ -75,6 +77,8 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/callback") view=pages::CallbackPage/>
                 <ParentRoute path=path!("") view=Shell>
                     <Route path=path!("") view=|| view! { <Redirect path="/boards"/> }/>
+                    <Route path=path!("me") view=pages::MyWorkPage/>
+                    <Route path=path!("me/profile") view=pages::ProfilePage/>
                     <Route path=path!("boards") view=pages::BoardsPage/>
                     <Route path=path!("boards/:board") view=pages::BoardPage/>
                     <Route path=path!("items/:code") view=pages::ItemPage/>
@@ -98,7 +102,7 @@ pub fn App() -> impl IntoView {
                     </ParentRoute>
                     <Route path=path!("activity") view=pages::ActivityPage/>
                     <Route path=path!("activity/history/:code") view=pages::ItemHistoryPage/>
-                    <Route path=path!("agent-keys") view=pages::AgentKeysPage/>
+                    <Route path=path!("agent-keys") view=|| view! { <Redirect path=pages::ProfileTab::AgentKeys.href()/> }/>
                     <Route path=path!("notifications") view=pages::NotificationsPage/>
                 </ParentRoute>
             </Routes>
@@ -143,10 +147,10 @@ fn Shell() -> impl IntoView {
                 navbar=Box::new(move || view! {
                     <SideNav>
                         <NavLink href="/boards" label="Boards"/>
+                        <NavLink href="/me" label="My work" exact=true/>
                         <NavLink href="/teams" label="Teams"/>
                         <NavLink href="/search" label="Search"/>
                         <NavLink href="/activity" label="Activity"/>
-                        <NavLink href="/agent-keys" label="Agent keys"/>
                         <pages::admin::AdminNavLink/>
                         <DocsSitesNavLink whoami/>
                         <MyTeamsNav whoami/>
@@ -306,14 +310,20 @@ fn DocsSitesNavLink(whoami: LocalResource<Result<api::Whoami, ApiError>>) -> imp
 
 /// One left-nav entry: an Aurora `SideNavLink`. Plain anchors are fine:
 /// the leptos router intercepts same-origin clicks. The link is active on
-/// its own path and on each path under it (`aria-current="page"`).
+/// its own path and on each path under it (`aria-current="page"`). With
+/// `exact`, only on its own path: "My work" (`/me`) is not active on the
+/// profile (`/me/profile`).
 #[component]
-pub(crate) fn NavLink(#[prop(into)] href: String, #[prop(into)] label: String) -> impl IntoView {
+pub(crate) fn NavLink(
+    #[prop(into)] href: String,
+    #[prop(into)] label: String,
+    #[prop(optional)] exact: bool,
+) -> impl IntoView {
     let pathname = use_location().pathname;
     let target = href.clone();
     let active = Signal::derive(move || {
         let path = pathname.get();
-        path == target || path.starts_with(&format!("{target}/"))
+        path == target || (!exact && path.starts_with(&format!("{target}/")))
     });
     view! {
         <SideNavLink href=href active=active>{label}</SideNavLink>
@@ -333,7 +343,9 @@ fn WhoamiBadge(whoami: LocalResource<Result<api::Whoami, ApiError>>) -> impl Int
             }.into_any(),
             Some(Ok(me)) => view! {
                 <Group gap="sm">
-                    <Text bright=true size="sm">{me.user.display_name.clone()}</Text>
+                    <a href="/me/profile" title="Your profile and settings">
+                        <Text bright=true size="sm">{me.user.display_name.clone()}</Text>
+                    </a>
                     <Pill color=token::ICE>{me.organization.slug.clone()}</Pill>
                     <Pill color=token::VIOLET>{me.organization.role.clone()}</Pill>
                 </Group>

@@ -58,7 +58,7 @@ struct NotificationSettings {
 /// mirror of: `kairos_client::types_notifications::MarkNotificationsReadResponse`
 /// (partial).
 #[derive(Clone, Debug, PartialEq, Deserialize)]
-struct Marked {
+pub(crate) struct Marked {
     unread: i64,
 }
 
@@ -66,7 +66,7 @@ const LIST: &str = "/api/me/notifications";
 const READ: &str = "/api/me/notifications/read";
 const SETTINGS: &str = "/api/me/notification-settings";
 
-async fn list(auth: Auth) -> Result<NotificationList, ApiError> {
+pub(crate) async fn list(auth: Auth) -> Result<NotificationList, ApiError> {
     crate::api::get_json(auth, LIST).await
 }
 
@@ -78,12 +78,12 @@ fn mark_body(id: Option<&str>) -> serde_json::Value {
     }
 }
 
-async fn mark(auth: Auth, id: Option<&str>) -> Result<Marked, ApiError> {
+pub(crate) async fn mark(auth: Auth, id: Option<&str>) -> Result<Marked, ApiError> {
     crate::api::post_json(auth, READ, &mark_body(id)).await
 }
 
 /// The words of a kind. Pure, host-tested.
-fn kind_label(kind: &str) -> &'static str {
+pub(crate) fn kind_label(kind: &str) -> &'static str {
     match kind {
         "hand_off" => "Hand-off",
         "blocker_cleared" => "Blocker cleared",
@@ -268,7 +268,7 @@ pub fn NotificationBell() -> impl IntoView {
                                 on_click=Callback::new(on_mark_all)>
                                 "Mark all read"
                             </Button>
-                            <Button variant="subtle" size="xs" href="/notifications"
+                            <Button variant="subtle" size="xs" href=crate::pages::ProfileTab::Notifications.href()
                                 on_click=Callback::new(move |_| open.set(false))>
                                 "Settings"
                             </Button>
@@ -309,6 +309,66 @@ pub fn NotificationsPage() -> impl IntoView {
         StoredValue::new_local(Some(guard));
     on_cleanup(move || live_guard.set_value(None));
 
+    let on_marked = Callback::new(move |result: Result<(), ApiError>| {
+        if let Err(error) = result {
+            outcome.set(Some(Err(error)));
+        }
+        reload.update(|n| *n += 1);
+    });
+    let on_mark_all = move |_| {
+        run_mutation(
+            busy,
+            outcome,
+            reload,
+            "Kairos marked each notification read.".to_string(),
+            async move { mark(auth, None).await.map(|_| ()) },
+        );
+    };
+
+    view! {
+        <PageHeader title="Notifications" sub="Kairos tells you when a person hands off a task \
+                                               to you, when a blocker of your task clears, when \
+                                               a person cancels a task that you created, when a \
+                                               person writes your user name, when a P0 bug \
+                                               lands on the board of your team, and when Kairos \
+                                               turns off a webhook target that you own."/>
+        <Stack gap="md">
+            <MutationNotice outcome/>
+            <Panel title="Your notifications"
+                caption="A notification that you mark read here is read for your agent too.">
+                <Stack gap="sm">
+                    <Group justify="end">
+                        <Button variant="default" size="xs" on_click=Callback::new(on_mark_all)>
+                            "Mark all read"
+                        </Button>
+                    </Group>
+                    {move || match notifications.get() {
+                        None => view! { <Loading/> }.into_any(),
+                        Some(Err(error)) => view! {
+                            <ErrorState error on_retry=Callback::new(move |_| reload.update(|n| *n += 1))/>
+                        }.into_any(),
+                        Some(Ok(list)) => view! {
+                            <NotificationRows items=list.items busy on_marked/>
+                        }.into_any(),
+                    }}
+                </Stack>
+            </Panel>
+            <Text size="sm" dimmed=true>
+                "To choose what Kairos tells you, open "
+                <Anchor href=crate::pages::ProfileTab::Notifications.href()>"the settings of your profile"</Anchor>
+                "."
+            </Text>
+        </Stack>
+    }
+}
+
+/// The notification settings of the person: the tab "Notifications" of the
+/// profile. Each switch turns one kind of notification on or off.
+#[component]
+pub fn NotificationSettingsPanel() -> impl IntoView {
+    let auth = use_auth();
+    let busy = RwSignal::new(false);
+    let outcome: RwSignal<MutationOutcome> = RwSignal::new(None);
     // The switches of the settings, filled when the settings arrive.
     let hand_off = RwSignal::new(true);
     let blocker_cleared = RwSignal::new(true);
@@ -356,51 +416,10 @@ pub fn NotificationsPage() -> impl IntoView {
             },
         );
     };
-    let on_marked = Callback::new(move |result: Result<(), ApiError>| {
-        if let Err(error) = result {
-            outcome.set(Some(Err(error)));
-        }
-        reload.update(|n| *n += 1);
-    });
-    let on_mark_all = move |_| {
-        run_mutation(
-            busy,
-            outcome,
-            reload,
-            "Kairos marked each notification read.".to_string(),
-            async move { mark(auth, None).await.map(|_| ()) },
-        );
-    };
-
     view! {
-        <PageHeader title="Notifications" sub="Kairos tells you when a person hands off a task \
-                                               to you, when a blocker of your task clears, when \
-                                               a person cancels a task that you created, when a \
-                                               person writes your user name, when a P0 bug \
-                                               lands on the board of your team, and when Kairos \
-                                               turns off a webhook target that you own."/>
         <Stack gap="md">
             <MutationNotice outcome/>
-            <Panel title="Your notifications"
-                caption="A notification that you mark read here is read for your agent too.">
-                <Stack gap="sm">
-                    <Group justify="end">
-                        <Button variant="default" size="xs" on_click=Callback::new(on_mark_all)>
-                            "Mark all read"
-                        </Button>
-                    </Group>
-                    {move || match notifications.get() {
-                        None => view! { <Loading/> }.into_any(),
-                        Some(Err(error)) => view! {
-                            <ErrorState error on_retry=Callback::new(move |_| reload.update(|n| *n += 1))/>
-                        }.into_any(),
-                        Some(Ok(list)) => view! {
-                            <NotificationRows items=list.items busy on_marked/>
-                        }.into_any(),
-                    }}
-                </Stack>
-            </Panel>
-            <Panel title="Settings"
+            <Panel title="Notification settings"
                 caption="Turn a kind off, and Kairos makes no notification of that kind for you.">
                 {move || match settings.get() {
                     None => view! { <Loading/> }.into_any(),

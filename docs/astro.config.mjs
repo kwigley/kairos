@@ -74,6 +74,7 @@ export default defineConfig({
 								page('how-to/move-work-between-boards', 'Move work between boards'),
 								page('how-to/wind-down-a-team', 'Wind down a team'),
 								page('how-to/find-archived-work', 'Find archived work'),
+								page('how-to/see-your-work', 'See your work'),
 								page('how-to/read-your-notifications', 'Read your notifications'),
 							],
 						},

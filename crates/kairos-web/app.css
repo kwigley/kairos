@@ -614,3 +614,9 @@
   grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
   gap: var(--space-sm);
 }
+
+/* The body of a tab of the profile (/me/profile): space below the tab list,
+ * as a panel has. */
+.kairos-profile-tab {
+  padding-top: 0.75rem;
+}

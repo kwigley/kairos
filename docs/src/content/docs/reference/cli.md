@@ -565,6 +565,8 @@ Filters:
 | `--updated-after <RFC3339>` | RFC 3339 instant | none | Only items with a last change strictly after this instant. |
 | `--updated-before <RFC3339>` | RFC 3339 instant | none | Only items with a last change strictly before this instant. For the items with no change in 90 days, give the time 90 days ago. |
 | `--metadata-missing <SLUG>` | metadata-definition slug | none | Only items with no value for this definition, e.g. `--metadata-missing priority`. Repeatable. An unknown slug is refused. |
+| `--claimed-by <PERSON>` | `me` or a person UUID | none | Only the tasks that this person has a claim on. `--claimed-by me` gives your claimed tasks. |
+| `--owner <PERSON>` | `me` or a person UUID | none | Only the strategies and the initiatives that this person owns. |
 | `--include-deleted` | flag | off | Include archived items. Composes with `--query` and `--from`; archived hits are marked in the output. |
 
 Traversal:

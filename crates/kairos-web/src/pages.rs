@@ -321,12 +321,16 @@ mod activity;
 pub use activity::{ActivityPage, ItemHistoryPage};
 
 // The agent keys of the signed-in person (KAIROS-T-0359): make, list and
-// revoke the keys that let an agent act as the person.
+// revoke the keys that let an agent act as the person. A tab of the profile.
 mod agent_keys;
-pub use agent_keys::AgentKeysPage;
+
+// The personal pages of the signed-in person: "My work" and the profile,
+// which holds the settings.
+mod me;
+pub use me::{MyWorkPage, ProfilePage, ProfileTab};
 
 // The notifications of the signed-in person (KAIROS-T-0383): the bell of
-// the shell, and the page with the list and the settings.
+// the shell, and the page with the list. The settings are on the profile.
 mod notifications;
 pub use notifications::{NotificationBell, NotificationsPage};
 

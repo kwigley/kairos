@@ -58,10 +58,11 @@
 //!    entity type — **bounded at 5 queries regardless of result size**
 //!    ([`SearchStats::hydration_queries`] proves it) — carrying the
 //!    structural filter predicates (`board_id`, `column_id`, `team_id`, `repository_id`,
-//!    `task_type`, `is_bucket`, `created_after`/`before`) and the
+//!    `task_type`, `is_bucket`, `created_after`/`before`, `claimed_by`, `owner`) and the
 //!    `deleted_at IS NULL` default. Filters on attributes a type does not
 //!    have exclude the type outright (e.g. `task_type` ⇒ tasks only,
-//!    `board_id` ⇒ no documents), so those types cost no query at all.
+//!    `board_id` ⇒ no documents, `claimed_by` ⇒ tasks only, `owner` ⇒
+//!    strategies and initiatives only), so those types cost no query at all.
 //!    `repository_id` keeps three types (COLLIERY-T-0269): the tasks that
 //!    link to the repository, and the documents and the ADRs that impact
 //!    it. `board_id` is the board that an item is a card of. A document
@@ -653,6 +654,14 @@ fn applicable_types(filter: Option<&SearchFilter>) -> Vec<ItemType> {
             // is_bucket is an initiative-level attribute.
             types.retain(|t| *t == ItemType::Initiative);
         }
+        if filter.claimed_by.is_some() {
+            // Only a task has a claim.
+            types.retain(|t| *t == ItemType::Task);
+        }
+        if filter.owner.is_some() {
+            // Only a strategy and an initiative have an owner.
+            types.retain(|t| matches!(t, ItemType::Strategy | ItemType::Initiative));
+        }
     }
     types
 }
@@ -695,6 +704,19 @@ fn impacting(
         .into_boxed()
 }
 
+/// The ids of the items that a person owns, as a subquery: the filter
+/// `owner` of a strategy and of an initiative. It is part of the hydration
+/// query of the type, so it adds no query.
+fn owned_by(
+    person: Uuid,
+) -> crate::schema::item_owners::BoxedQuery<'static, diesel::pg::Pg, SqlUuid> {
+    use crate::schema::item_owners::dsl;
+    dsl::item_owners
+        .filter(dsl::user_id.eq(person))
+        .select(dsl::item_id)
+        .into_boxed()
+}
+
 fn hydrate_strategies(
     conn: &mut PgConnection,
     ids: Option<Vec<Uuid>>,
@@ -716,6 +738,9 @@ fn hydrate_strategies(
         }
         if let Some(column_id) = filter.column_id {
             query = query.filter(dsl::column_id.eq(column_id));
+        }
+        if let Some(person) = filter.owner {
+            query = query.filter(dsl::id.eq_any(owned_by(person)));
         }
         if let Some(after) = filter.created_after {
             query = query.filter(dsl::created_at.gt(after));
@@ -760,6 +785,9 @@ fn hydrate_initiatives(
         }
         if let Some(column_id) = filter.column_id {
             query = query.filter(dsl::column_id.eq(column_id));
+        }
+        if let Some(person) = filter.owner {
+            query = query.filter(dsl::id.eq_any(owned_by(person)));
         }
         if let Some(is_bucket) = filter.is_bucket {
             query = query.filter(dsl::is_bucket.eq(is_bucket));
@@ -808,6 +836,16 @@ fn hydrate_tasks(
         }
         if let Some(team_id) = filter.team_id {
             query = query.filter(dsl::team_id.eq(team_id));
+        }
+        if let Some(person) = filter.claimed_by {
+            use crate::schema::task_claims::dsl as claims;
+            query = query.filter(
+                dsl::id.eq_any(
+                    claims::task_claims
+                        .filter(claims::user_id.eq(person))
+                        .select(claims::task_id),
+                ),
+            );
         }
         if let Some(repository_id) = filter.repository_id {
             query = query.filter(dsl::repository_id.eq(repository_id));

@@ -89,7 +89,7 @@ pub(crate) async fn create_agent_key(
     if auth.agent_key.is_some() {
         return Err(ApiError::forbidden(
             "An agent key cannot make agent keys. Log in as yourself, then make the key \
-             with `kairos keys create` or on the Agent keys page.",
+             with `kairos keys create` or on the tab Agent keys of your profile.",
         ));
     }
     let name = body.name.trim().to_string();
@@ -252,7 +252,7 @@ pub(crate) async fn rotate_agent_key(
     if auth.agent_key.is_some() {
         return Err(ApiError::forbidden(
             "An agent key cannot rotate agent keys. Log in as yourself, then rotate the key \
-             with `kairos keys rotate` or on the Agent keys page.",
+             with `kairos keys rotate` or on the tab Agent keys of your profile.",
         ));
     }
     let key_id = parse_uuid(&key_id, "key_id")?;
