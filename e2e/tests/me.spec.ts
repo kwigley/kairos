@@ -1,6 +1,6 @@
 // The personal pages:
 //
-//   1. the sign-in lands on /me, "My work";
+//   1. "My work" in the nav opens /me;
 //   2. a task that alice moves into Active shows in "My claims";
 //   3. the name in the top bar opens the profile, and its tabs show the
 //      teams, the access, the notification settings and the agent keys;
@@ -21,7 +21,9 @@ async function login(page: Page): Promise<void> {
   await page.fill('#login', 'alice@kairos.test');
   await page.fill('#password', 'alice-password');
   await page.click('#submit-login');
-  await page.waitForURL((url) => url.pathname === '/me', { timeout: 30_000 });
+  await page.waitForURL((url) => url.pathname.startsWith('/boards'), {
+    timeout: 30_000,
+  });
 }
 
 async function moveTo(token: string, code: string, column: string): Promise<void> {
@@ -47,8 +49,10 @@ test('My work shows the claims, and the profile holds the settings', async ({ pa
     if (created.column_id !== todo) await moveTo(token, code, todo);
     await moveTo(token, code, active);
 
-    await test.step('the sign-in lands on My work', async () => {
+    await test.step('My work in the nav opens /me', async () => {
       await login(page);
+      await page.locator('a[href="/me"]').first().click();
+      await page.waitForURL((url) => url.pathname === '/me');
       await expect(page.getByRole('heading', { name: 'My work' })).toBeVisible();
     });
 

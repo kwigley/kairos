@@ -171,7 +171,7 @@ Routes (in `app.rs`): `/login`, `/callback` (auth, public);
 `/me` and `/me/profile` (the personal pages), `/boards`, `/boards/:board`
 (T-0040), `/items/:code` (T-0041), `/search` (T-0042), `/admin` (T-0043),
 `/activity` (T-0044) — all under the protected `Shell` `ParentRoute`; `/`
-redirects to `/me`. The module doc of `app.rs` has the full route map.
+redirects to `/boards`. The module doc of `app.rs` has the full route map.
 
 Fan-out rules:
 

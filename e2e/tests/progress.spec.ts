@@ -22,10 +22,9 @@ test('children progress: card badge and detail bar for a seeded parent', async (
     await page.fill('#login', 'alice@kairos.test');
     await page.fill('#password', 'alice-password');
     await page.click('#submit-login');
-    await page.waitForURL((url) => url.pathname.startsWith('/me'), {
+    await page.waitForURL((url) => url.pathname.startsWith('/boards'), {
       timeout: 30_000,
     });
-    await page.goto('/boards');
   });
 
   // 2. The initiative card carries the micro-badge ---------------------------

@@ -7,8 +7,8 @@
 //! |-----------------|----------------------|------------|
 //! | `/login`        | explicit sign-in     | here       |
 //! | `/callback`     | PKCE redirect target | here       |
-//! | `/`             | redirect → `/me`     | here       |
-//! | `/me`           | my work, the landing page | here  |
+//! | `/`             | redirect → `/boards` | here       |
+//! | `/me`           | my work              | here       |
 //! | `/me/profile`   | the person and the settings (`?tab=`) | here |
 //! | `/boards`       | board list           | T-0040     |
 //! | `/boards/:board`| board view           | T-0040     |
@@ -76,7 +76,7 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/login") view=pages::LoginPage/>
                 <Route path=path!("/callback") view=pages::CallbackPage/>
                 <ParentRoute path=path!("") view=Shell>
-                    <Route path=path!("") view=|| view! { <Redirect path="/me"/> }/>
+                    <Route path=path!("") view=|| view! { <Redirect path="/boards"/> }/>
                     <Route path=path!("me") view=pages::MyWorkPage/>
                     <Route path=path!("me/profile") view=pages::ProfilePage/>
                     <Route path=path!("boards") view=pages::BoardsPage/>
@@ -146,8 +146,8 @@ fn Shell() -> impl IntoView {
                 }.into_any())
                 navbar=Box::new(move || view! {
                     <SideNav>
-                        <NavLink href="/me" label="My work" exact=true/>
                         <NavLink href="/boards" label="Boards"/>
+                        <NavLink href="/me" label="My work" exact=true/>
                         <NavLink href="/teams" label="Teams"/>
                         <NavLink href="/search" label="Search"/>
                         <NavLink href="/activity" label="Activity"/>

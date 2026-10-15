@@ -63,10 +63,9 @@ test('GUI smoke: login → boards → create → move → live WS → edit/409 �
     await page.fill('#login', 'alice@kairos.test');
     await page.fill('#password', 'alice-password');
     await page.click('#submit-login');
-    await page.waitForURL((url) => url.pathname.startsWith('/me'), {
+    await page.waitForURL((url) => url.pathname.startsWith('/boards'), {
       timeout: 30_000,
     });
-    await page.goto('/boards');
     const header = page.locator('.cl-appshell__header');
     await expect(header.getByText('alice', { exact: true })).toBeVisible();
     await expect(header.locator('.cl-pill', { hasText: 'demo' })).toBeVisible();

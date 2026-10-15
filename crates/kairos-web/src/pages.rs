@@ -324,8 +324,8 @@ pub use activity::{ActivityPage, ItemHistoryPage};
 // revoke the keys that let an agent act as the person. A tab of the profile.
 mod agent_keys;
 
-// The personal pages of the signed-in person: "My work" (the landing page)
-// and the profile, which holds the settings.
+// The personal pages of the signed-in person: "My work" and the profile,
+// which holds the settings.
 mod me;
 pub use me::{MyWorkPage, ProfilePage};
 

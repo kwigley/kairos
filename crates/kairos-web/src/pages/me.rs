@@ -1,6 +1,6 @@
 //! The personal pages of the signed-in person.
 //!
-//! - `/me`, "My work", is the landing page: what needs the person now, the
+//! - `/me`, "My work", in the nav: what needs the person now, the
 //!   tasks that the person has a claim on, and the strategies and the
 //!   initiatives that the person owns.
 //! - `/me/profile` is the person and the settings, in tabs (`?tab=`): the
@@ -119,7 +119,7 @@ fn stale_cutoff() -> String {
         .unwrap_or_default()
 }
 
-/// `/me`: the landing page.
+/// `/me`: the work of the person.
 #[component]
 pub fn MyWorkPage() -> impl IntoView {
     let auth = use_auth();

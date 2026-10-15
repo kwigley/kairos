@@ -72,7 +72,7 @@ async function login(page: Page, email: string, password: string) {
   await page.fill('#login', email);
   await page.fill('#password', password);
   await page.click('#submit-login');
-  await page.waitForURL((url) => url.pathname.startsWith('/me'), {
+  await page.waitForURL((url) => url.pathname.startsWith('/boards'), {
     timeout: 30_000,
   });
 }

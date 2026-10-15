@@ -5,8 +5,7 @@ title: "See your work"
 This page describes Kairos 0.13.0.
 
 The page **My work** shows the work that you hold and what needs you now.
-It is the first page after you sign in. To open it later, select **My work**
-in the side menu.
+To open it, select **My work** in the side menu.
 
 **Before you start:** you are a member of the organization.
 
