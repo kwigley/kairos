@@ -128,6 +128,15 @@ pub struct SearchFilter {
     /// `["priority"]`. An unknown slug is refused.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata_missing: Option<Vec<String>>,
+    /// Only the tasks that this person has a claim on: `"me"` (the caller)
+    /// or the id of a person (UUID). Excludes each other type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claimed_by: Option<String>,
+    /// Only the strategies and the initiatives that this person owns:
+    /// `"me"` (the caller) or the id of a person (UUID). Excludes each other
+    /// type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
     /// Include archived (soft-deleted) items (default false). Composes with
     /// every other capability — `q` and `traverse` included since
     /// KAIROS-T-0157 — and is a complete request on its own. Archived hits
@@ -197,6 +206,15 @@ pub struct SearchResponse {
     pub limit: i64,
     /// The applied offset.
     pub offset: i64,
+    /// The open `blocks` edges of each item of the page, keyed by short
+    /// code, as on the items of a board. An item with no open edge has no
+    /// entry.
+    ///
+    /// The server sends it in each response, so the schema shows it as
+    /// required. The default is for the client only.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub blocks_summary: BTreeMap<String, crate::types_org::BlocksCounts>,
 }
 
 /// The `results` object: one fully-typed group per entity type, each group
@@ -282,12 +300,14 @@ mod tests {
             total: 0,
             limit: 25,
             offset: 0,
+            blocks_summary: BTreeMap::new(),
         };
         let value = serde_json::to_value(&response).expect("serializes");
         assert_eq!(value["results"], serde_json::json!({}));
         assert_eq!(value["total"], 0);
         assert_eq!(value["limit"], 25);
         assert_eq!(value["offset"], 0);
+        assert_eq!(value["blocks_summary"], serde_json::json!({}));
         let back: SearchResponse = serde_json::from_value(value).expect("deserializes");
         assert_eq!(back, response);
     }

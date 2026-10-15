@@ -184,6 +184,14 @@ pub struct SearchFilter {
     /// `metadata_missing: ["priority"]`. An unknown slug is refused.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata_missing: Option<Vec<String>>,
+    /// Only the tasks that this person has a claim on. A claim is only on a
+    /// task, so the filter excludes each other type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claimed_by: Option<Uuid>,
+    /// Only the strategies and the initiatives that this person owns. Only
+    /// these two types have an owner, so the filter excludes each other type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<Uuid>,
     /// Include soft-deleted items (default false — soft-deleted are
     /// excluded everywhere by default).
     #[serde(default)]
@@ -216,6 +224,8 @@ impl SearchFilter {
             || self.updated_after.is_some()
             || self.updated_before.is_some()
             || self.metadata_missing.is_some()
+            || self.claimed_by.is_some()
+            || self.owner.is_some()
     }
 }
 
@@ -776,6 +786,28 @@ mod tests {
             validate(&request),
             Err(SearchValidationError::BlankMetadataKey)
         );
+    }
+
+    #[test]
+    fn claimed_by_and_owner_each_make_a_complete_request() {
+        let person = Uuid::new_v4();
+        for filter in [
+            SearchFilter {
+                claimed_by: Some(person),
+                ..Default::default()
+            },
+            SearchFilter {
+                owner: Some(person),
+                ..Default::default()
+            },
+        ] {
+            assert!(filter.is_constraining());
+            let request = SearchRequest {
+                filter: Some(filter),
+                ..Default::default()
+            };
+            assert_eq!(validate(&request), Ok(()));
+        }
     }
 
     #[test]

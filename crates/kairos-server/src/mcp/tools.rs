@@ -68,6 +68,7 @@ use kairos_db::search::{SearchError, SearchResults};
 use kairos_db::{GraphError, abac, boards, graph, items, repositories, search};
 
 use crate::api::meta::{manage_capability, validated_metadata_ops};
+use crate::api::search::person_field;
 use crate::api::{
     Liveness, atomically, map_board_error, map_graph_error, map_item_error, parse_enum,
     require_capability, require_edge_write, require_item_edit, resolve_short_code,
@@ -394,6 +395,12 @@ pub struct SearchFilterParams {
     /// Only items with NO value for each of these metadata definitions
     /// (slugs), e.g. ["priority"]. An unknown slug is refused.
     pub metadata_missing: Option<Vec<String>>,
+    /// Only the tasks that this person has a claim on: "me" or the id of a
+    /// person (UUID). Excludes each other type.
+    pub claimed_by: Option<String>,
+    /// Only the strategies and the initiatives that this person owns: "me"
+    /// or the id of a person (UUID). Excludes each other type.
+    pub owner: Option<String>,
     /// Include archived (soft-deleted) items (default false). Composes with
     /// everything, `q` and `traverse` included; archived hits come back
     /// marked `[archived]`.
@@ -2656,15 +2663,15 @@ impl KairosMcp {
     }
 
     #[tool(
-        description = "Search items: full-text `q`, a structured `filter` (types, board, column, team, repository, task_type, metadata, metadata_missing, updated_before, updated_after) and a graph `traverse`, in any mix; at least one. Board and team take a slug or UUID. \"Untouched for 90 days\" is `updated_before` = now minus 90 days; \"bugs without a priority\" is `{entity_type: [task], task_type: [bug], metadata_missing: [priority]}`. `filter.repository` gives the tasks linked to it and the documents and ADRs that impact it. Compact results by type; `get_item` gives the content."
+        description = "Search items: full-text `q`, a structured `filter` (types, board, column, team, repository, task_type, metadata, metadata_missing, updated_before, updated_after) and a graph `traverse`, in any mix; at least one. Board and team take a slug or UUID. `claimed_by: \"me\"` gives the tasks that you have a claim on, and `owner: \"me\"` the strategies and initiatives that you own. \"Untouched for 90 days\" is `updated_before` = now minus 90 days; \"bugs without a priority\" is `{entity_type: [task], task_type: [bug], metadata_missing: [priority]}`. `filter.repository` gives the tasks linked to it and the documents and ADRs that impact it. Compact results by type; `get_item` gives the content."
     )]
     pub async fn search(
         &self,
         Parameters(params): Parameters<SearchParams>,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        let (_, tenant) = Self::caller(&context)?;
-        let mut request = match search_to_core(&params) {
+        let (auth, tenant) = Self::caller(&context)?;
+        let mut request = match search_to_core(&params, auth.user_id) {
             Ok(request) => request,
             Err(e) => return Ok(tool_error(e)),
         };
@@ -7148,7 +7155,12 @@ fn render_related_work(found: &crate::embedding::RelatedWork) -> String {
     out
 }
 
-fn search_to_core(params: &SearchParams) -> Result<core_search::SearchRequest, ApiError> {
+/// The core request of the `search` tool. `caller` is the person that
+/// `"me"` names in `claimed_by` and `owner`.
+fn search_to_core(
+    params: &SearchParams,
+    caller: Uuid,
+) -> Result<core_search::SearchRequest, ApiError> {
     let filter = params
         .filter
         .as_ref()
@@ -7233,6 +7245,16 @@ fn search_to_core(params: &SearchParams) -> Result<core_search::SearchRequest, A
                     .map(|v| timestamp_field(v, "filter.updated_before"))
                     .transpose()?,
                 metadata_missing: filter.metadata_missing.clone(),
+                claimed_by: filter
+                    .claimed_by
+                    .as_deref()
+                    .map(|v| person_field(v, "filter.claimed_by", caller))
+                    .transpose()?,
+                owner: filter
+                    .owner
+                    .as_deref()
+                    .map(|v| person_field(v, "filter.owner", caller))
+                    .transpose()?,
                 include_deleted: filter.include_deleted,
             })
         })
