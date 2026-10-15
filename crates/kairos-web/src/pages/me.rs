@@ -12,8 +12,8 @@
 //! each item (`blocks_summary`), so the page needs no read for each item.
 
 use aurora_dark::components::{
-    Anchor, Empty, ErrorState, Group, Loading, Panel, Pill, RelativeTime, SimpleGrid, Stack, Table,
-    TableRow, Text,
+    Anchor, Button, Empty, ErrorState, Group, Loading, Panel, Pill, RelativeTime, SimpleGrid,
+    Stack, Table, TableRow, Text,
 };
 use aurora_dark::frame::{Card, PageHeader, TabItem, Tabs};
 use aurora_dark::tokens::{ApiError, token};
@@ -25,7 +25,7 @@ use crate::auth::use_auth;
 
 pub(crate) mod data;
 
-use data::{MyWork, Need, Reason, STALE_DAYS, WorkItem};
+use data::{MyWork, Need, Reason, STALE_DAYS, UNREAD_SHOWN, WorkItem};
 
 /// `/me`: the work of the person.
 #[component]
@@ -38,12 +38,40 @@ pub fn MyWorkPage() -> impl IntoView {
         reload.get();
         data::load_work(auth)
     });
+    let unread_reload = RwSignal::new(0u32);
     let unread = LocalResource::new(move || {
         let _ = auth.token();
         reload.get();
+        unread_reload.get();
         data::load_unread(auth)
     });
     let retry = Callback::new(move |_| reload.update(|n| *n += 1));
+
+    // As the bell: each event of the person (a new notification, a mark
+    // read on another surface) reads the work again. A hand-off makes a
+    // notification and changes the claims, so both lists read again.
+    let guard = crate::pages::boards::live::subscribe_person_events(auth, move || {
+        reload.try_update(|n| *n += 1);
+    });
+    let live_guard: StoredValue<Option<crate::pages::boards::live::LiveBoardGuard>, LocalStorage> =
+        StoredValue::new_local(Some(guard));
+    on_cleanup(move || live_guard.set_value(None));
+
+    // Mark read, as in the bell: `None` marks each unread notification.
+    let busy = RwSignal::new(false);
+    let mark_error: RwSignal<Option<ApiError>> = RwSignal::new(None);
+    let on_mark = Callback::new(move |id: Option<String>| {
+        if busy.get_untracked() {
+            return;
+        }
+        busy.set(true);
+        leptos::task::spawn_local(async move {
+            let result = crate::pages::notifications::mark(auth, id.as_deref()).await;
+            busy.set(false);
+            mark_error.set(result.err());
+            unread_reload.update(|n| *n += 1);
+        });
+    });
     let teams = move || {
         whoami
             .and_then(|w| w.get())
@@ -61,14 +89,17 @@ pub fn MyWorkPage() -> impl IntoView {
                 view! { <ErrorState error on_retry=retry/> }.into_any()
             }
             (Some(Ok(work)), Some(Ok(unread))) => {
-                let needs = data::needs_you(&work.claims, &unread, &data::stale_cutoff());
+                let needs = data::needs_you(&work.claims, &unread.newest, &data::stale_cutoff());
+                let more = unread.more();
                 let claims = work.clone();
                 view! {
                     <Stack gap="md">
                         <Panel title="Needs you"
-                            caption=format!("Blocked claims first, then unread notifications, \
+                            caption=format!("Blocked claims first, then the {UNREAD_SHOWN} newest \
+                                             unread notifications (your agent sees the same), \
                                              then claims with no change for {STALE_DAYS} days.")>
-                            <NeedsTable needs/>
+                            {move || mark_error.get().map(|error| view! { <ErrorState error/> })}
+                            <NeedsTable needs more busy on_mark/>
                         </Panel>
                         <Panel title="My claims"
                             caption="The tasks that you hold. You get the claim when you move a \
@@ -99,27 +130,55 @@ pub fn MyWorkPage() -> impl IntoView {
     }
 }
 
-/// The words and the color of a reason.
-fn reason_pill(reason: Reason) -> (&'static str, &'static str) {
-    match reason {
-        Reason::Blocked => ("Blocked", token::BAD),
-        Reason::Unread => ("Unread", token::ICE),
-        Reason::Stale => ("No change", token::GOLD),
+/// The words and the color of a row: the kind of a notification, as the
+/// bell and the MCP block name it.
+fn reason_pill(need: &Need) -> (&'static str, &'static str) {
+    match (need.reason, &need.notification) {
+        (Reason::Blocked, _) => ("Blocked", token::BAD),
+        (Reason::Unread, Some(note)) => (
+            crate::pages::notifications::kind_label(&note.kind),
+            token::ICE,
+        ),
+        (Reason::Unread, None) => ("Unread", token::ICE),
+        (Reason::Stale, _) => ("No change", token::GOLD),
     }
 }
 
+/// "Needs you". `more` is the count of the unread notifications that the
+/// table does not show. `on_mark` marks one notification read, or each one
+/// with `None`.
 #[component]
-fn NeedsTable(needs: Vec<Need>) -> impl IntoView {
+fn NeedsTable(
+    needs: Vec<Need>,
+    more: i64,
+    busy: RwSignal<bool>,
+    on_mark: Callback<Option<String>>,
+) -> impl IntoView {
     if needs.is_empty() {
         return view! { <Empty message="Nothing needs you now."/> }.into_any();
     }
+    let any_unread = needs.iter().any(|n| n.notification.is_some());
     view! {
         <div data-testid="needs-you">
+            {any_unread.then(|| view! {
+                <Group justify="end" gap="sm">
+                    {(more > 0).then(|| view! {
+                        <Anchor href="/notifications">{format!("{more} more unread")}</Anchor>
+                    })}
+                    <Button variant="default" size="xs" disabled=Signal::derive(move || busy.get())
+                        on_click=Callback::new(move |_| on_mark.run(None))>
+                        "Mark all read"
+                    </Button>
+                </Group>
+            })}
             <Table label="Needs you">
-                <thead><tr><th>"Why"</th><th>"Item"</th><th>"What"</th><th>"When"</th></tr></thead>
+                <thead><tr>
+                    <th>"Why"</th><th>"Item"</th><th>"What"</th><th>"When"</th><th>""</th>
+                </tr></thead>
                 <tbody>
                     {needs.into_iter().map(|need| {
-                        let (label, color) = reason_pill(need.reason);
+                        let (label, color) = reason_pill(&need);
+                        let id = need.notification.map(|note| note.id);
                         view! {
                             <TableRow>
                                 <td><Pill color=color>{label}</Pill></td>
@@ -128,6 +187,13 @@ fn NeedsTable(needs: Vec<Need>) -> impl IntoView {
                                 })}</td>
                                 <td><Text size="sm">{need.text}</Text></td>
                                 <td><RelativeTime iso=need.at/></td>
+                                <td>{id.map(|id| view! {
+                                    <Button variant="default" size="xs"
+                                        disabled=Signal::derive(move || busy.get())
+                                        on_click=Callback::new(move |_| on_mark.run(Some(id.clone())))>
+                                        "Mark read"
+                                    </Button>
+                                })}</td>
                             </TableRow>
                         }
                     }).collect_view()}

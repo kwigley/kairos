@@ -13,6 +13,7 @@ use serde_json::json;
 use crate::api;
 use crate::auth::Auth;
 use crate::pages::boards::data::{BlocksCounts, BoardDetail, board_path, list_boards};
+use crate::pages::notifications::NotificationList;
 use crate::pages::teams::api::{list_teams, team_announcements};
 
 /// A claim with no change for this many days is stale.
@@ -192,19 +193,53 @@ pub async fn load_work(auth: Auth) -> Result<MyWork, ApiError> {
     })
 }
 
+/// How many unread notifications "Needs you" shows: the same newest ones
+/// that end each answer of a Kairos MCP tool (`RIDE_ALONG` in
+/// `kairos-server/src/mcp/tools.rs`), so the person and the agent see the
+/// same notifications.
+pub const UNREAD_SHOWN: usize = 5;
+
+/// The newest unread notifications of the person, and the count of all of
+/// them.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UnreadNotifications {
+    pub newest: Vec<Unread>,
+    pub total: i64,
+}
+
+impl UnreadNotifications {
+    /// The unread notifications that "Needs you" does not show.
+    pub fn more(&self) -> i64 {
+        (self.total - self.newest.len() as i64).max(0)
+    }
+}
+
+/// The [`UNREAD_SHOWN`] newest unread notifications of a list. The server
+/// sends the unread ones first, the newest first. Pure, host-tested.
+pub fn newest_unread(list: NotificationList) -> UnreadNotifications {
+    UnreadNotifications {
+        newest: list
+            .items
+            .into_iter()
+            .filter(|n| n.read_at.is_none())
+            .take(UNREAD_SHOWN)
+            .map(|n| Unread {
+                id: n.id,
+                kind: n.kind,
+                short_code: n.short_code,
+                text: n.text,
+                created_at: n.created_at,
+            })
+            .collect(),
+        total: list.unread,
+    }
+}
+
 /// The unread notifications of the person, as "Needs you" reads them.
-pub async fn load_unread(auth: Auth) -> Result<Vec<Unread>, ApiError> {
-    let list = crate::pages::notifications::list(auth).await?;
-    Ok(list
-        .items
-        .into_iter()
-        .filter(|n| n.read_at.is_none())
-        .map(|n| Unread {
-            short_code: n.short_code,
-            text: n.text,
-            created_at: n.created_at,
-        })
-        .collect())
+pub async fn load_unread(auth: Auth) -> Result<UnreadNotifications, ApiError> {
+    Ok(newest_unread(
+        crate::pages::notifications::list(auth).await?,
+    ))
 }
 
 /// Now minus [`STALE_DAYS`], as an RFC 3339 time.
@@ -263,6 +298,9 @@ pub enum Reason {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Need {
     pub reason: Reason,
+    /// The notification of an [`Reason::Unread`] row: its id, to mark it
+    /// read, and its kind.
+    pub notification: Option<NotificationRef>,
     pub short_code: Option<String>,
     pub text: String,
     /// The time of the row (RFC 3339): the last change of the task, or the
@@ -270,9 +308,18 @@ pub struct Need {
     pub at: String,
 }
 
+/// The id and the kind of a notification.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NotificationRef {
+    pub id: String,
+    pub kind: String,
+}
+
 /// An unread notification, as "Needs you" reads it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Unread {
+    pub id: String,
+    pub kind: String,
     pub short_code: Option<String>,
     pub text: String,
     pub created_at: String,
@@ -296,6 +343,7 @@ pub fn needs_you(claims: &Work, unread: &[Unread], cutoff: &str) -> Vec<Need> {
             let noun = if blockers == 1 { "blocker" } else { "blockers" };
             rows.push(Need {
                 reason: Reason::Blocked,
+                notification: None,
                 short_code: Some(task.short_code.clone()),
                 text: format!("{} waits on {blockers} open {noun}.", task.title),
                 at: task.updated_at.clone(),
@@ -303,6 +351,7 @@ pub fn needs_you(claims: &Work, unread: &[Unread], cutoff: &str) -> Vec<Need> {
         } else if is_before(&task.updated_at, cutoff) {
             rows.push(Need {
                 reason: Reason::Stale,
+                notification: None,
                 short_code: Some(task.short_code.clone()),
                 text: format!(
                     "{} has no change for {STALE_DAYS} days or more.",
@@ -314,6 +363,10 @@ pub fn needs_you(claims: &Work, unread: &[Unread], cutoff: &str) -> Vec<Need> {
     }
     rows.extend(unread.iter().map(|n| Need {
         reason: Reason::Unread,
+        notification: Some(NotificationRef {
+            id: n.id.clone(),
+            kind: n.kind.clone(),
+        }),
         short_code: n.short_code.clone(),
         text: n.text.clone(),
         at: n.created_at.clone(),
@@ -424,6 +477,8 @@ mod tests {
             },
         );
         let unread = vec![Unread {
+            id: "n1".into(),
+            kind: "hand_off".into(),
             short_code: Some("DEMO-T-0009".into()),
             text: "Bob gave you DEMO-T-0009.".into(),
             created_at: "2026-10-13T00:00:00Z".into(),
@@ -445,6 +500,40 @@ mod tests {
             rows[0].text,
             "Title of DEMO-T-0002 waits on 1 open blocker."
         );
+        assert_eq!(
+            rows[1].notification,
+            Some(NotificationRef {
+                id: "n1".into(),
+                kind: "hand_off".into(),
+            })
+        );
+        assert_eq!(rows[0].notification, None);
+    }
+
+    #[test]
+    fn the_newest_unread_are_the_ones_the_agent_sees() {
+        use crate::pages::notifications::Notification;
+
+        let note = |id: usize, read: bool| Notification {
+            id: format!("n{id}"),
+            kind: "mention".into(),
+            short_code: None,
+            text: format!("Text {id}"),
+            created_at: format!("2026-10-1{id}T00:00:00Z"),
+            read_at: read.then(|| "2026-10-14T00:00:00Z".to_string()),
+        };
+        // The server sends the unread first, the newest first, then read.
+        let list = NotificationList {
+            unread: 7,
+            items: (0..7)
+                .map(|i| note(i, false))
+                .chain([note(9, true)])
+                .collect(),
+        };
+        let unread = newest_unread(list);
+        let ids: Vec<&str> = unread.newest.iter().map(|n| n.id.as_str()).collect();
+        assert_eq!(ids, vec!["n0", "n1", "n2", "n3", "n4"]);
+        assert_eq!(unread.more(), 2);
     }
 
     #[test]

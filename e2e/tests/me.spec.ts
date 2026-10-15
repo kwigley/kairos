@@ -1,10 +1,13 @@
 // The personal pages:
 //
 //   1. "My work" in the nav opens /me;
-//   2. a task that alice moves into Active shows in "My claims";
-//   3. the name in the top bar opens the profile, and its tabs show the
+//   2. a hand-off to alice shows live in "Needs you" with its kind, the
+//      same notification that her agent sees, and Mark read clears it for
+//      both;
+//   3. a task that alice moves into Active shows in "My claims";
+//   4. the name in the top bar opens the profile, and its tabs show the
 //      teams, the access, the notification settings and the agent keys;
-//   4. /agent-keys goes to the tab Agent keys of the profile.
+//   5. /agent-keys goes to the tab Agent keys of the profile.
 //
 // The task is new for each run (a timestamped title), so a retry starts
 // clean.
@@ -26,17 +29,32 @@ async function login(page: Page): Promise<void> {
   });
 }
 
-async function moveTo(token: string, code: string, column: string): Promise<void> {
-  const res = await fetch(`${GUI}/api/tasks/${code}/transition`, {
+async function post(token: string, path: string, body: unknown): Promise<any> {
+  const res = await fetch(`${GUI}${path}`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ to_column_id: column }),
+    body: JSON.stringify(body),
   });
-  expect(res.ok, await res.text()).toBeTruthy();
+  const text = await res.text();
+  expect(res.ok, text).toBeTruthy();
+  return text ? JSON.parse(text) : null;
+}
+
+async function moveTo(token: string, code: string, column: string): Promise<void> {
+  await post(token, `/api/tasks/${code}/transition`, { to_column_id: column });
+}
+
+async function unread(token: string): Promise<number> {
+  const res = await fetch(`${GUI}/api/me/notifications`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  expect(res.ok).toBeTruthy();
+  return (await res.json()).unread;
 }
 
 test('My work shows the claims, and the profile holds the settings', async ({ page }) => {
   const token = await mintToken();
+  const bob = await mintToken({ email: 'bob@kairos.test', password: 'bob-password' });
   const board = await loadBoard(GUI, token, (b) => b.slug === 'platform-delivery');
   const todo = board.columnId.get('Todo');
   const active = board.columnId.get('Active');
@@ -44,6 +62,8 @@ test('My work shows the claims, and the profile holds the settings', async ({ pa
   const title = `E2E my work ${Date.now()}`;
   const created = await createTask(GUI, token, { title, boardId: board.id });
   const code: string = created.short_code;
+  const given = await createTask(GUI, bob, { title: `E2E handed ${Date.now()}`, boardId: board.id });
+  const handed: string = given.short_code;
 
   try {
     if (created.column_id !== todo) await moveTo(token, code, todo);
@@ -54,6 +74,22 @@ test('My work shows the claims, and the profile holds the settings', async ({ pa
       await page.locator('a[href="/me"]').first().click();
       await page.waitForURL((url) => url.pathname === '/me');
       await expect(page.getByRole('heading', { name: 'My work' })).toBeVisible();
+    });
+
+    await test.step('a hand-off shows live in Needs you, and Mark read clears it', async () => {
+      await post(token, '/api/me/notifications/read', { all: true });
+      if (given.column_id !== todo) await moveTo(bob, handed, todo);
+      await moveTo(bob, handed, active);
+      await post(bob, `/api/tasks/${handed}/hand-off`, { to: 'alice@kairos.test' });
+      const row = page.locator('[data-testid="needs-you"] tr', { hasText: handed });
+      // No reload: the page reads the work again on the event.
+      await expect(row).toContainText('Hand-off', { timeout: 20_000 });
+      expect(await unread(token)).toBe(1);
+      await row.getByRole('button', { name: 'Mark read', exact: true }).click();
+      await expect(row.filter({ hasText: 'Hand-off' })).toHaveCount(0, { timeout: 20_000 });
+      // The mark is shared: the bell, and the block at the end of each MCP
+      // answer of her agent, read the same state.
+      expect(await unread(token)).toBe(0);
     });
 
     await test.step('the claimed task is in My claims', async () => {
@@ -85,9 +121,14 @@ test('My work shows the claims, and the profile holds the settings', async ({ pa
       await expect(page.getByRole('button', { name: 'Make key', exact: true })).toBeVisible();
     });
   } finally {
-    await fetch(`${GUI}/api/tasks/${code}`, {
-      method: 'DELETE',
-      headers: { authorization: `Bearer ${token}` },
-    });
+    for (const [owner, item] of [
+      [token, code],
+      [bob, handed],
+    ]) {
+      await fetch(`${GUI}/api/tasks/${item}`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${owner}` },
+      });
+    }
   }
 });

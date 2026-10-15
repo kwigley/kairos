@@ -58,7 +58,7 @@ struct NotificationSettings {
 /// mirror of: `kairos_client::types_notifications::MarkNotificationsReadResponse`
 /// (partial).
 #[derive(Clone, Debug, PartialEq, Deserialize)]
-struct Marked {
+pub(crate) struct Marked {
     unread: i64,
 }
 
@@ -78,12 +78,12 @@ fn mark_body(id: Option<&str>) -> serde_json::Value {
     }
 }
 
-async fn mark(auth: Auth, id: Option<&str>) -> Result<Marked, ApiError> {
+pub(crate) async fn mark(auth: Auth, id: Option<&str>) -> Result<Marked, ApiError> {
     crate::api::post_json(auth, READ, &mark_body(id)).await
 }
 
 /// The words of a kind. Pure, host-tested.
-fn kind_label(kind: &str) -> &'static str {
+pub(crate) fn kind_label(kind: &str) -> &'static str {
     match kind {
         "hand_off" => "Hand-off",
         "blocker_cleared" => "Blocker cleared",
