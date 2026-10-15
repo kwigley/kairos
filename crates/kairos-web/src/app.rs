@@ -146,7 +146,7 @@ fn Shell() -> impl IntoView {
                 }.into_any())
                 navbar=Box::new(move || view! {
                     <SideNav>
-                        <NavLink href="/me" label="My work"/>
+                        <NavLink href="/me" label="My work" exact=true/>
                         <NavLink href="/boards" label="Boards"/>
                         <NavLink href="/teams" label="Teams"/>
                         <NavLink href="/search" label="Search"/>
@@ -310,14 +310,20 @@ fn DocsSitesNavLink(whoami: LocalResource<Result<api::Whoami, ApiError>>) -> imp
 
 /// One left-nav entry: an Aurora `SideNavLink`. Plain anchors are fine:
 /// the leptos router intercepts same-origin clicks. The link is active on
-/// its own path and on each path under it (`aria-current="page"`).
+/// its own path and on each path under it (`aria-current="page"`). With
+/// `exact`, only on its own path: "My work" (`/me`) is not active on the
+/// profile (`/me/profile`).
 #[component]
-pub(crate) fn NavLink(#[prop(into)] href: String, #[prop(into)] label: String) -> impl IntoView {
+pub(crate) fn NavLink(
+    #[prop(into)] href: String,
+    #[prop(into)] label: String,
+    #[prop(optional)] exact: bool,
+) -> impl IntoView {
     let pathname = use_location().pathname;
     let target = href.clone();
     let active = Signal::derive(move || {
         let path = pathname.get();
-        path == target || path.starts_with(&format!("{target}/"))
+        path == target || (!exact && path.starts_with(&format!("{target}/")))
     });
     view! {
         <SideNavLink href=href active=active>{label}</SideNavLink>

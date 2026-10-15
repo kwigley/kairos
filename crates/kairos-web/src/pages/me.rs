@@ -146,6 +146,7 @@ pub fn MyWorkPage() -> impl IntoView {
 
     view! {
         <PageHeader title="My work" sub="What needs you now, and the work that you hold."/>
+        <Stack gap="md">
         {move || match (work.get(), unread.get()) {
             (None, _) | (_, None) => view! { <Loading/> }.into_any(),
             (Some(Err(error)), _) | (_, Some(Err(error))) => {
@@ -186,6 +187,7 @@ pub fn MyWorkPage() -> impl IntoView {
                 </Group>
             })
         }}
+        </Stack>
     }
 }
 
@@ -383,12 +385,14 @@ pub fn ProfilePage() -> impl IntoView {
             }
         }}
         <Tabs tabs value=tab_value label="Profile"/>
-        {move || match tab.get().as_str() {
-            "access" => view! { <AccessTab/> }.into_any(),
-            "notifications" => view! { <crate::pages::notifications::NotificationSettingsPanel/> }.into_any(),
-            "agent-keys" => view! { <crate::pages::agent_keys::AgentKeysPanel/> }.into_any(),
-            _ => view! { <TeamsTab/> }.into_any(),
-        }}
+        <div class="kairos-profile-tab">
+            {move || match tab.get().as_str() {
+                "access" => view! { <AccessTab/> }.into_any(),
+                "notifications" => view! { <crate::pages::notifications::NotificationSettingsPanel/> }.into_any(),
+                "agent-keys" => view! { <crate::pages::agent_keys::AgentKeysPanel/> }.into_any(),
+                _ => view! { <TeamsTab/> }.into_any(),
+            }}
+        </div>
     }
 }
 
@@ -471,7 +475,9 @@ fn AccessTab() -> impl IntoView {
         {move || match whoami.and_then(|w| w.get()) {
             None => view! { <Loading/> }.into_any(),
             Some(Err(error)) => view! { <ErrorState error/> }.into_any(),
-            Some(Ok(me)) => view! {
+            Some(Ok(me)) => {
+                let admin = me.organization.role == "admin";
+                view! {
                 <Stack gap="md">
                     <Text size="sm" dimmed=true>
                         {format!("Your role in the organization is {}.", me.organization.role)}
@@ -480,7 +486,13 @@ fn AccessTab() -> impl IntoView {
                         caption="The capabilities that you have on each board: from a grant, or \
                                  from the membership of the board.">
                         {if me.capabilities.is_empty() {
-                            view! { <Empty message="You have no capability on a board."/> }.into_any()
+                            let message = if admin {
+                                "You have no grant on a board. As an organization admin, you can \
+                                 change each board."
+                            } else {
+                                "You have no capability on a board."
+                            };
+                            view! { <Empty message=message/> }.into_any()
                         } else {
                             view! {
                                 <Table label="Your boards">
@@ -516,7 +528,9 @@ fn AccessTab() -> impl IntoView {
                         </Panel>
                     })}
                 </Stack>
-            }.into_any(),
+                }
+                .into_any()
+            }
         }}
     }
 }
