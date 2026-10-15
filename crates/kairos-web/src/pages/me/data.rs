@@ -1,14 +1,19 @@
 //! The data of the personal pages: two searches (the tasks that the person
 //! has a claim on, and the strategies and initiatives that the person owns),
-//! the unread notifications, and the rule that orders "Needs you".
+//! the unread notifications, the teams of the person, and the rule that
+//! orders "Needs you".
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use aurora_dark::tokens::ApiError;
+use futures_util::future::join_all;
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::api;
 use crate::auth::Auth;
+use crate::pages::boards::data::{BlocksCounts, BoardDetail, board_path, list_boards};
+use crate::pages::teams::api::{list_teams, team_announcements};
 
 /// A claim with no change for this many days is stale.
 pub const STALE_DAYS: f64 = 5.0;
@@ -62,13 +67,6 @@ pub struct Claim {
     pub agent: bool,
 }
 
-/// mirror of: `kairos_client::types_org::BlocksCounts`.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize)]
-pub struct BlocksCounts {
-    pub blocked_by: i64,
-    pub blocks: i64,
-}
-
 impl Work {
     /// The words that say the page shows part of the list, or `None` when
     /// it shows all of it. Pure, host-tested.
@@ -110,6 +108,144 @@ pub async fn my_claims(auth: Auth) -> Result<Work, ApiError> {
 /// The strategies and the initiatives that the caller owns.
 pub async fn my_owned(auth: Auth) -> Result<Work, ApiError> {
     crate::api::post_json(auth, "/api/search", &body("owner")).await
+}
+
+/// The slug and the name of a board, for a link to it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BoardLabel {
+    pub slug: String,
+    pub name: String,
+}
+
+/// The work of the person, and the names that the page shows for it.
+#[derive(Clone, Debug, Default)]
+pub struct MyWork {
+    pub claims: Work,
+    pub owned: Work,
+    /// The board of each board id.
+    boards: HashMap<String, BoardLabel>,
+    /// The name of each column of the boards of the owned items.
+    columns: HashMap<String, String>,
+}
+
+impl MyWork {
+    /// The board of an id. The id stands in for an unknown board.
+    pub fn board(&self, id: &str) -> BoardLabel {
+        self.boards.get(id).cloned().unwrap_or_else(|| BoardLabel {
+            slug: id.to_string(),
+            name: "Board".to_string(),
+        })
+    }
+
+    /// The name of a column, or empty for an unknown column.
+    pub fn column(&self, id: &str) -> String {
+        self.columns.get(id).cloned().unwrap_or_default()
+    }
+}
+
+/// The work of the person. The two searches must answer. The names of the
+/// boards and of the columns are only labels: when they do not load, the
+/// page shows the work with the fallback labels.
+pub async fn load_work(auth: Auth) -> Result<MyWork, ApiError> {
+    let (claims, owned, boards) =
+        futures_util::join!(my_claims(auth), my_owned(auth), list_boards(auth));
+    let (claims, owned) = (claims?, owned?);
+    let boards = boards.unwrap_or_default();
+    let mut owned_boards: Vec<&str> = owned
+        .results
+        .strategies
+        .iter()
+        .chain(owned.results.initiatives.iter())
+        .map(|item| item.board_id.as_str())
+        .collect();
+    owned_boards.sort_unstable();
+    owned_boards.dedup();
+    let paths: Vec<String> = owned_boards.iter().map(|id| board_path(id)).collect();
+    let details = join_all(
+        paths
+            .iter()
+            .map(|path| api::get_json::<BoardDetail>(auth, path)),
+    )
+    .await;
+    let mut columns = HashMap::new();
+    for detail in details.into_iter().flatten() {
+        for column in detail.columns {
+            columns.insert(column.id, column.name);
+        }
+    }
+    Ok(MyWork {
+        claims,
+        owned,
+        boards: boards
+            .into_iter()
+            .map(|b| {
+                (
+                    b.id,
+                    BoardLabel {
+                        slug: b.slug,
+                        name: b.name,
+                    },
+                )
+            })
+            .collect(),
+        columns,
+    })
+}
+
+/// The unread notifications of the person, as "Needs you" reads them.
+pub async fn load_unread(auth: Auth) -> Result<Vec<Unread>, ApiError> {
+    let list = crate::pages::notifications::list(auth).await?;
+    Ok(list
+        .items
+        .into_iter()
+        .filter(|n| n.read_at.is_none())
+        .map(|n| Unread {
+            short_code: n.short_code,
+            text: n.text,
+            created_at: n.created_at,
+        })
+        .collect())
+}
+
+/// Now minus [`STALE_DAYS`], as an RFC 3339 time.
+pub fn stale_cutoff() -> String {
+    let at = js_sys::Date::now() - STALE_DAYS * 24.0 * 60.0 * 60.0 * 1000.0;
+    js_sys::Date::new(&at.into())
+        .to_iso_string()
+        .as_string()
+        .unwrap_or_default()
+}
+
+/// One team of the person, with its board and its latest announcement.
+#[derive(Clone, Debug)]
+pub struct MyTeam {
+    pub slug: String,
+    pub name: String,
+    pub board: Option<String>,
+    pub announcement: Option<String>,
+}
+
+/// The teams of the person (`mine`, from whoami), each with its delivery
+/// board and its latest announcement.
+pub async fn load_teams(auth: Auth, mine: Vec<api::WhoamiTeam>) -> Result<Vec<MyTeam>, ApiError> {
+    let teams = list_teams(auth).await?;
+    let boards: HashMap<String, Option<String>> = teams
+        .into_iter()
+        .map(|t| (t.id, t.delivery_board_id))
+        .collect();
+    let announcements = join_all(mine.iter().map(|team| team_announcements(auth, &team.id))).await;
+    let mut out = Vec::new();
+    for (team, announcements) in mine.into_iter().zip(announcements) {
+        let announcements = announcements?;
+        out.push(MyTeam {
+            board: boards.get(&team.id).cloned().flatten(),
+            // The server sends the pinned first, then the newest.
+            announcement: announcements.first().map(|a| a.body.clone()),
+            slug: team.slug,
+            name: team.name,
+        });
+    }
+    Ok(out)
 }
 
 /// Why a row is in "Needs you", the most urgent first.

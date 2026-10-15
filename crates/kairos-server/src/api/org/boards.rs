@@ -1215,22 +1215,7 @@ pub(crate) async fn board_items(
             // card in a terminal column has no entry, and adds nothing to
             // the entry of the card at the other end.
             let item_ids: Vec<Uuid> = item_codes.iter().map(|(id, _)| *id).collect();
-            let blocks =
-                kairos_db::graph::blocks_summary(conn, &item_ids).map_err(ApiError::internal)?;
-            let blocks_summary: std::collections::BTreeMap<String, dto::BlocksCounts> = item_codes
-                .iter()
-                .filter_map(|(id, code)| {
-                    blocks.get(id).map(|counts| {
-                        (
-                            code.clone(),
-                            dto::BlocksCounts {
-                                blocked_by: counts.blocked_by,
-                                blocks: counts.blocks,
-                            },
-                        )
-                    })
-                })
-                .collect();
+            let blocks_summary = crate::api::convert::blocks_summary(conn, &item_codes)?;
             // KAIROS-T-0321: the teams of each strategy and initiative of
             // the page, one query for the board.
             let item_teams =

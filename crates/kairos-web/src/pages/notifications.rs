@@ -268,7 +268,7 @@ pub fn NotificationBell() -> impl IntoView {
                                 on_click=Callback::new(on_mark_all)>
                                 "Mark all read"
                             </Button>
-                            <Button variant="subtle" size="xs" href="/me/profile?tab=notifications"
+                            <Button variant="subtle" size="xs" href=crate::pages::ProfileTab::Notifications.href()
                                 on_click=Callback::new(move |_| open.set(false))>
                                 "Settings"
                             </Button>
@@ -355,7 +355,7 @@ pub fn NotificationsPage() -> impl IntoView {
             </Panel>
             <Text size="sm" dimmed=true>
                 "To choose what Kairos tells you, open "
-                <Anchor href="/me/profile?tab=notifications">"the settings of your profile"</Anchor>
+                <Anchor href=crate::pages::ProfileTab::Notifications.href()>"the settings of your profile"</Anchor>
                 "."
             </Text>
         </Stack>

@@ -11,113 +11,21 @@
 //! "me"`). The search gives the claim of each task and the open blockers of
 //! each item (`blocks_summary`), so the page needs no read for each item.
 
-use std::collections::HashMap;
-
 use aurora_dark::components::{
     Anchor, Empty, ErrorState, Group, Loading, Panel, Pill, RelativeTime, SimpleGrid, Stack, Table,
     TableRow, Text,
 };
 use aurora_dark::frame::{Card, PageHeader, TabItem, Tabs};
 use aurora_dark::tokens::{ApiError, token};
-use futures_util::future::join_all;
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
 
 use crate::api;
-use crate::auth::{Auth, use_auth};
-use crate::pages::boards::data::{BoardDetail, board_path, list_boards};
-use crate::pages::teams::api::{list_teams, team_announcements};
+use crate::auth::use_auth;
 
 pub(crate) mod data;
 
-use data::{Need, Reason, STALE_DAYS, Unread, Work, WorkItem};
-
-/// The work of the person, and the names that the page shows for it.
-#[derive(Clone, Debug, Default)]
-struct MyWork {
-    claims: Work,
-    owned: Work,
-    /// The board of each id: (slug, name).
-    boards: HashMap<String, (String, String)>,
-    /// The name of each column of the boards of the owned items.
-    columns: HashMap<String, String>,
-}
-
-impl MyWork {
-    fn board(&self, id: &str) -> (String, String) {
-        self.boards
-            .get(id)
-            .cloned()
-            .unwrap_or_else(|| (id.to_string(), "Board".to_string()))
-    }
-}
-
-/// The work of the person. The two searches must answer. The names of the
-/// boards and of the columns are only labels: when they do not load, the
-/// page shows the work with the fallback labels.
-async fn load_work(auth: Auth) -> Result<MyWork, ApiError> {
-    let (claims, owned, boards) = futures_util::join!(
-        data::my_claims(auth),
-        data::my_owned(auth),
-        list_boards(auth)
-    );
-    let (claims, owned) = (claims?, owned?);
-    let boards = boards.unwrap_or_default();
-    let mut owned_boards: Vec<&str> = owned
-        .results
-        .strategies
-        .iter()
-        .chain(owned.results.initiatives.iter())
-        .map(|item| item.board_id.as_str())
-        .collect();
-    owned_boards.sort_unstable();
-    owned_boards.dedup();
-    let paths: Vec<String> = owned_boards.iter().map(|id| board_path(id)).collect();
-    let details = join_all(
-        paths
-            .iter()
-            .map(|path| api::get_json::<BoardDetail>(auth, path)),
-    )
-    .await;
-    let mut columns = HashMap::new();
-    for detail in details.into_iter().flatten() {
-        for column in detail.columns {
-            columns.insert(column.id, column.name);
-        }
-    }
-    Ok(MyWork {
-        claims,
-        owned,
-        boards: boards
-            .into_iter()
-            .map(|b| (b.id, (b.slug, b.name)))
-            .collect(),
-        columns,
-    })
-}
-
-async fn load_unread(auth: Auth) -> Result<Vec<Unread>, ApiError> {
-    let list = crate::pages::notifications::list(auth).await?;
-    Ok(list
-        .items
-        .into_iter()
-        .filter(|n| n.read_at.is_none())
-        .map(|n| Unread {
-            short_code: n.short_code,
-            text: n.text,
-            created_at: n.created_at,
-        })
-        .collect())
-}
-
-/// Now minus [`STALE_DAYS`], as an RFC 3339 time.
-fn stale_cutoff() -> String {
-    let at = js_sys::Date::now() - STALE_DAYS * 24.0 * 60.0 * 60.0 * 1000.0;
-    js_sys::Date::new(&at.into())
-        .to_iso_string()
-        .as_string()
-        .unwrap_or_default()
-}
+use data::{MyWork, Need, Reason, STALE_DAYS, WorkItem};
 
 /// `/me`: the work of the person.
 #[component]
@@ -128,12 +36,12 @@ pub fn MyWorkPage() -> impl IntoView {
     let work = LocalResource::new(move || {
         let _ = auth.token();
         reload.get();
-        load_work(auth)
+        data::load_work(auth)
     });
     let unread = LocalResource::new(move || {
         let _ = auth.token();
         reload.get();
-        load_unread(auth)
+        data::load_unread(auth)
     });
     let retry = Callback::new(move |_| reload.update(|n| *n += 1));
     let teams = move || {
@@ -153,7 +61,7 @@ pub fn MyWorkPage() -> impl IntoView {
                 view! { <ErrorState error on_retry=retry/> }.into_any()
             }
             (Some(Ok(work)), Some(Ok(unread))) => {
-                let needs = data::needs_you(&work.claims, &unread, &stale_cutoff());
+                let needs = data::needs_you(&work.claims, &unread, &data::stale_cutoff());
                 let claims = work.clone();
                 view! {
                     <Stack gap="md">
@@ -250,13 +158,13 @@ fn ClaimsTable(work: MyWork) -> impl IntoView {
                 </tr></thead>
                 <tbody>
                     {tasks.into_iter().map(|task| {
-                        let (slug, name) = work.board(&task.board_id);
+                        let board = work.board(&task.board_id);
                         let blockers = work.claims.blocked_by(&task.short_code);
                         let claim = task.claim.clone();
                         view! {
                             <TableRow>
                                 <td><ItemCell item=task.clone()/></td>
-                                <td><Anchor href=format!("/boards/{slug}")>{name}</Anchor></td>
+                                <td><Anchor href=format!("/boards/{}", board.slug)>{board.name}</Anchor></td>
                                 <td><RelativeTime iso=claim.as_ref().map(|c| c.claimed_at.clone())/></td>
                                 <td><RelativeTime iso=task.updated_at/></td>
                                 <td>
@@ -308,13 +216,13 @@ fn OwnedTable(work: MyWork) -> impl IntoView {
                 </tr></thead>
                 <tbody>
                     {items.into_iter().map(|(kind, item)| {
-                        let (slug, name) = work.board(&item.board_id);
-                        let column = work.columns.get(&item.column_id).cloned().unwrap_or_default();
+                        let board = work.board(&item.board_id);
+                        let column = work.column(&item.column_id);
                         view! {
                             <TableRow>
                                 <td><ItemCell item=item.clone()/></td>
                                 <td><Pill color=token::VIOLET>{kind}</Pill></td>
-                                <td><Anchor href=format!("/boards/{slug}")>{name}</Anchor></td>
+                                <td><Anchor href=format!("/boards/{}", board.slug)>{board.name}</Anchor></td>
                                 <td><Text size="sm">{column}</Text></td>
                                 <td><RelativeTime iso=item.updated_at/></td>
                             </TableRow>
@@ -337,20 +245,55 @@ fn ItemCell(item: WorkItem) -> impl IntoView {
     }
 }
 
-/// The tabs of the profile: (value of `?tab=`, label).
-const TABS: [(&str, &str); 4] = [
-    ("teams", "Teams"),
-    ("access", "Access"),
-    ("notifications", "Notifications"),
-    ("agent-keys", "Agent keys"),
-];
+/// A tab of the profile. `?tab=` holds its key, so a link opens one tab.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProfileTab {
+    Teams,
+    Access,
+    Notifications,
+    AgentKeys,
+}
 
-/// The tab of a `?tab=` value: the first tab for no value or an unknown
-/// one. Pure, host-tested.
-fn tab_of(value: Option<&str>) -> &'static str {
-    value
-        .and_then(|v| TABS.iter().find(|(key, _)| *key == v))
-        .map_or(TABS[0].0, |(key, _)| key)
+impl ProfileTab {
+    /// The tabs, in the order of the tab list.
+    const ALL: [ProfileTab; 4] = [
+        ProfileTab::Teams,
+        ProfileTab::Access,
+        ProfileTab::Notifications,
+        ProfileTab::AgentKeys,
+    ];
+
+    /// The value of `?tab=`.
+    fn key(self) -> &'static str {
+        match self {
+            ProfileTab::Teams => "teams",
+            ProfileTab::Access => "access",
+            ProfileTab::Notifications => "notifications",
+            ProfileTab::AgentKeys => "agent-keys",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            ProfileTab::Teams => "Teams",
+            ProfileTab::Access => "Access",
+            ProfileTab::Notifications => "Notifications",
+            ProfileTab::AgentKeys => "Agent keys",
+        }
+    }
+
+    /// The path that opens the tab.
+    pub fn href(self) -> String {
+        format!("/me/profile?tab={}", self.key())
+    }
+
+    /// The tab of a `?tab=` value: the first tab for no value or an unknown
+    /// one. Pure, host-tested.
+    fn from_query(value: Option<&str>) -> Self {
+        value
+            .and_then(|v| Self::ALL.into_iter().find(|tab| tab.key() == v))
+            .unwrap_or(ProfileTab::Teams)
+    }
 }
 
 /// `/me/profile`: the person and the settings.
@@ -358,12 +301,12 @@ fn tab_of(value: Option<&str>) -> &'static str {
 pub fn ProfilePage() -> impl IntoView {
     let whoami = use_context::<LocalResource<Result<api::Whoami, ApiError>>>();
     let query = use_query_map();
-    let tab = Memo::new(move |_| tab_of(query.read().get("tab").as_deref()).to_string());
-    let tab_value = RwSignal::new(tab.get_untracked());
-    Effect::new(move |_| tab_value.set(tab.get()));
-    let tabs: Vec<TabItem> = TABS
-        .iter()
-        .map(|(key, label)| TabItem::new(*key, *label).href(format!("/me/profile?tab={key}")))
+    let tab = Memo::new(move |_| ProfileTab::from_query(query.read().get("tab").as_deref()));
+    let tab_value = RwSignal::new(tab.get_untracked().key().to_string());
+    Effect::new(move |_| tab_value.set(tab.get().key().to_string()));
+    let tabs: Vec<TabItem> = ProfileTab::ALL
+        .into_iter()
+        .map(|tab| TabItem::new(tab.key(), tab.label()).href(tab.href()))
         .collect();
 
     view! {
@@ -386,44 +329,14 @@ pub fn ProfilePage() -> impl IntoView {
         }}
         <Tabs tabs value=tab_value label="Profile"/>
         <div class="kairos-profile-tab">
-            {move || match tab.get().as_str() {
-                "access" => view! { <AccessTab/> }.into_any(),
-                "notifications" => view! { <crate::pages::notifications::NotificationSettingsPanel/> }.into_any(),
-                "agent-keys" => view! { <crate::pages::agent_keys::AgentKeysPanel/> }.into_any(),
-                _ => view! { <TeamsTab/> }.into_any(),
+            {move || match tab.get() {
+                ProfileTab::Teams => view! { <TeamsTab/> }.into_any(),
+                ProfileTab::Access => view! { <AccessTab/> }.into_any(),
+                ProfileTab::Notifications => view! { <crate::pages::notifications::NotificationSettingsPanel/> }.into_any(),
+                ProfileTab::AgentKeys => view! { <crate::pages::agent_keys::AgentKeysPanel/> }.into_any(),
             }}
         </div>
     }
-}
-
-/// One team of the person, with its board and its latest announcement.
-#[derive(Clone, Debug)]
-struct MyTeam {
-    slug: String,
-    name: String,
-    board: Option<String>,
-    announcement: Option<String>,
-}
-
-async fn load_teams(auth: Auth, mine: Vec<api::WhoamiTeam>) -> Result<Vec<MyTeam>, ApiError> {
-    let teams = list_teams(auth).await?;
-    let boards: HashMap<String, Option<String>> = teams
-        .into_iter()
-        .map(|t| (t.id, t.delivery_board_id))
-        .collect();
-    let announcements = join_all(mine.iter().map(|team| team_announcements(auth, &team.id))).await;
-    let mut out = Vec::new();
-    for (team, announcements) in mine.into_iter().zip(announcements) {
-        let announcements = announcements?;
-        out.push(MyTeam {
-            board: boards.get(&team.id).cloned().flatten(),
-            // The server sends the pinned first, then the newest.
-            announcement: announcements.first().map(|a| a.body.clone()),
-            slug: team.slug,
-            name: team.name,
-        });
-    }
-    Ok(out)
 }
 
 #[component]
@@ -437,7 +350,7 @@ fn TeamsTab() -> impl IntoView {
             .and_then(|r| r.ok())
             .map(|me| me.teams)
             .unwrap_or_default();
-        load_teams(auth, mine)
+        data::load_teams(auth, mine)
     });
     view! {
         {move || match teams.get() {
@@ -541,9 +454,11 @@ mod tests {
 
     #[test]
     fn an_unknown_tab_is_the_first_tab() {
-        assert_eq!(tab_of(None), "teams");
-        assert_eq!(tab_of(Some("access")), "access");
-        assert_eq!(tab_of(Some("agent-keys")), "agent-keys");
-        assert_eq!(tab_of(Some("nope")), "teams");
+        assert_eq!(ProfileTab::from_query(None), ProfileTab::Teams);
+        assert_eq!(ProfileTab::from_query(Some("nope")), ProfileTab::Teams);
+        for tab in ProfileTab::ALL {
+            assert_eq!(ProfileTab::from_query(Some(tab.key())), tab);
+        }
+        assert_eq!(ProfileTab::AgentKeys.href(), "/me/profile?tab=agent-keys");
     }
 }

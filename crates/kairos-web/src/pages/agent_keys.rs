@@ -110,15 +110,14 @@ fn day_and_time(value: &str) -> String {
     }
 }
 
-/// The agent keys of the person: the tab "Agent keys" of the profile
-/// (`/me/profile?tab=agent-keys`).
+/// The agent keys of the person: the tab "Agent keys" of the profile.
 #[component]
 pub fn AgentKeysPanel() -> impl IntoView {
     let auth = use_auth();
     let reload = RwSignal::new(0u32);
     let outcome: RwSignal<MutationOutcome> = RwSignal::new(None);
     let busy = RwSignal::new(false);
-    // The secret of the key made last. It shows once, on this page only.
+    // The secret of the key made last. It shows once, on this tab only.
     let made: RwSignal<Option<(String, String)>> = RwSignal::new(None);
 
     let keys = LocalResource::new(move || {

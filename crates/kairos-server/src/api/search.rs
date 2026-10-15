@@ -227,7 +227,7 @@ fn attach_work_state(
     crate::claims::attach_claims(conn, &mut groups.tasks).map_err(ApiError::internal)?;
     crate::owners::attach_owners(conn, &mut groups.strategies)?;
     crate::owners::attach_owners(conn, &mut groups.initiatives)?;
-    let codes: std::collections::HashMap<Uuid, String> = groups
+    let items: Vec<(Uuid, String)> = groups
         .strategies
         .iter()
         .map(|i| (&i.id, &i.short_code))
@@ -237,25 +237,7 @@ fn attach_work_state(
         .chain(groups.adrs.iter().map(|i| (&i.id, &i.short_code)))
         .filter_map(|(id, code)| id.parse().ok().map(|id| (id, code.clone())))
         .collect();
-    if codes.is_empty() {
-        return Ok(());
-    }
-    let ids: Vec<Uuid> = codes.keys().copied().collect();
-    let counts = kairos_db::graph::blocks_summary(conn, &ids).map_err(ApiError::internal)?;
-    response.blocks_summary = counts
-        .into_iter()
-        .filter_map(|(id, counts)| {
-            codes.get(&id).map(|code| {
-                (
-                    code.clone(),
-                    kairos_client::types_org::BlocksCounts {
-                        blocked_by: counts.blocked_by,
-                        blocks: counts.blocks,
-                    },
-                )
-            })
-        })
-        .collect();
+    response.blocks_summary = super::convert::blocks_summary(conn, &items)?;
     Ok(())
 }
 

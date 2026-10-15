@@ -327,7 +327,7 @@ mod agent_keys;
 // The personal pages of the signed-in person: "My work" and the profile,
 // which holds the settings.
 mod me;
-pub use me::{MyWorkPage, ProfilePage};
+pub use me::{MyWorkPage, ProfilePage, ProfileTab};
 
 // The notifications of the signed-in person (KAIROS-T-0383): the bell of
 // the shell, and the page with the list. The settings are on the profile.
