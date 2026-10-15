@@ -39,9 +39,10 @@ test('drag and drop: legal move lands, illegal move is refused', async ({ page }
     await page.fill('#login', 'alice@kairos.test');
     await page.fill('#password', 'alice-password');
     await page.click('#submit-login');
-    await page.waitForURL((url) => url.pathname.startsWith('/boards'), {
+    await page.waitForURL((url) => url.pathname.startsWith('/me'), {
       timeout: 30_000,
     });
+    await page.goto('/boards');
   });
 
   // 2. Open the web board; the card is draggable and menu-free ---------------

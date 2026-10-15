@@ -7,7 +7,7 @@ downtime.
 
 | Key | Who changes it | How |
 |---|---|---|
-| An agent key | The person of the key | The Agent keys page, or `kairos keys rotate` |
+| An agent key | The person of the key | The tab Agent keys of the profile, or `kairos keys rotate` |
 | An API key of a service account | An organization admin | `kairos keys rotate --service-account` |
 | `KAIROS_SECRETS_KEY` | The operator | `KAIROS_SECRETS_KEY_OLD` and `kairos-server rotate-secrets` |
 | A webhook secret, or `KAIROS_WEBHOOK_SIGNING_KEY` | An organization admin, the operator | `POST /api/forge-connections/{id}/rotate` |
@@ -20,7 +20,7 @@ works until the end of the grace time (1 day, the setting
 
 1. Rotate the key:
 
-   - On the **Agent keys** page, click **Rotate** on the key.
+   - On the tab **Agent keys** of your profile, click **Rotate** on the key.
    - Or, for an agent key: `kairos keys rotate <KEY_ID>`.
    - Or, for a key of a service account (an organization admin):
      `kairos keys rotate <KEY_ID> --service-account <SERVICE_ACCOUNT>`.
@@ -43,7 +43,7 @@ A key with no expiry works until a person revokes it.
 
 | Key | Who can revoke it |
 |---|---|
-| An agent key | The person of the key (`kairos keys revoke`, the Agent keys page). An organization admin (`kairos admin agent-keys revoke`, the section **Agent keys of the people** of **Admin > Members**). |
+| An agent key | The person of the key (`kairos keys revoke`, the tab Agent keys of the profile). An organization admin (`kairos admin agent-keys revoke`, the section **Agent keys of the people** of **Admin > Members**). |
 | An API key of a service account | An organization admin (`kairos keys revoke --service-account`). |
 
 An organization admin can revoke the agent key of a person. Then Kairos writes
@@ -56,7 +56,7 @@ This occurs when an admin removes the person, and on a SCIM deprovision.
 A new key expires after 90 days (the setting `KAIROS_API_KEY_TTL_DAYS`). To set
 a different date, send `expires_at` (the CLI option `--expires-at`). To make a
 key with no expiry, send `no_expiry: true`. In the CLI, that is the flag
-`--no-expiry`. On the Agent keys page, it is the switch **No expiry**.
+`--no-expiry`. On the tab Agent keys of the profile, it is the switch **No expiry**.
 
 ## `KAIROS_SECRETS_KEY`
 

@@ -1,7 +1,7 @@
-//! `/agent-keys` (KAIROS-T-0359, KAIROS-A-0024): the agent keys of the
-//! signed-in person. Make a key (the secret shows once), list the keys, and
-//! revoke one. An agent key acts as the person, with the capabilities of the
-//! person.
+//! The agent keys of the signed-in person (KAIROS-T-0359, KAIROS-A-0024), on
+//! the tab "Agent keys" of the profile. `/agent-keys` goes there. Make a key
+//! (the secret shows once), list the keys, and revoke one. An agent key acts
+//! as the person, with the capabilities of the person.
 //!
 //! KAIROS-T-0370: a new key expires after the default life of the deployment
 //! (90 days unless the operator changed it), or never when the person asks
@@ -12,8 +12,8 @@
 //! `crate::api` helpers (envelope-aware errors, the 401 hook).
 
 use aurora_dark::components::{
-    Alert, Button, Code, CopyButton, Divider, Empty, ErrorState, Group, Loading, PageHeader, Panel,
-    Pill, Stack, Switch, Text, TextInput,
+    Alert, Button, Code, CopyButton, Divider, Empty, ErrorState, Group, Loading, Panel, Pill,
+    Stack, Switch, Text, TextInput,
 };
 use aurora_dark::tokens::{ApiError, token};
 use leptos::prelude::*;
@@ -110,9 +110,10 @@ fn day_and_time(value: &str) -> String {
     }
 }
 
-/// `/agent-keys`.
+/// The agent keys of the person: the tab "Agent keys" of the profile
+/// (`/me/profile?tab=agent-keys`).
 #[component]
-pub fn AgentKeysPage() -> impl IntoView {
+pub fn AgentKeysPanel() -> impl IntoView {
     let auth = use_auth();
     let reload = RwSignal::new(0u32);
     let outcome: RwSignal<MutationOutcome> = RwSignal::new(None);
@@ -161,10 +162,11 @@ pub fn AgentKeysPage() -> impl IntoView {
     };
 
     view! {
-        <PageHeader title="Agent keys" sub="An agent key lets an agent act as you. The agent \
-                                            gets your capabilities, and the history shows \
-                                            your name."/>
         <Stack gap="md">
+            <Text size="sm" dimmed=true>
+                "An agent key lets an agent act as you. The agent gets your capabilities, and \
+                 the history shows your name."
+            </Text>
             <MutationNotice outcome/>
             {move || made.get().map(|(key_name, key)| {
                 let copied = key.clone();

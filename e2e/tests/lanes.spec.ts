@@ -56,9 +56,10 @@ test('lanes: support renders above planned; drags and the lane control move card
     await page.fill('#login', 'alice@kairos.test');
     await page.fill('#password', 'alice-password');
     await page.click('#submit-login');
-    await page.waitForURL((url) => url.pathname.startsWith('/boards'), {
+    await page.waitForURL((url) => url.pathname.startsWith('/me'), {
       timeout: 30_000,
     });
+    await page.goto('/boards');
   });
 
   // 2. Lane structure + the seeded support fixtures --------------------------

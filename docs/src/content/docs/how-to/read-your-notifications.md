@@ -44,12 +44,14 @@ notification that you mark read is read for your agent too. See
 
 ## 3. Turn a kind off
 
-1. In the drawer, select **Settings**. The **Notifications** page opens.
+1. In the drawer, select **Settings**. The tab **Notifications** of your
+   profile opens. You can also select your name in the top bar, then the
+   tab **Notifications**.
 2. Turn off each kind that you do not want.
 3. Select **Save**.
 
-Kairos makes no notification of a kind that you turned off. The page also
-lists your notifications, with **Mark all read**.
+Kairos makes no notification of a kind that you turned off. The
+**Notifications** page lists your notifications, with **Mark all read**.
 
 You can do the same with REST: `GET` and `PUT /api/me/notification-settings`.
 

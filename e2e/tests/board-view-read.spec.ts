@@ -59,9 +59,10 @@ test('board view: the view reads the one board that it shows', async ({ page }) 
       await page.fill('#login', 'alice@kairos.test');
       await page.fill('#password', 'alice-password');
       await page.click('#submit-login');
-      await page.waitForURL((url) => url.pathname.startsWith('/boards'), {
+      await page.waitForURL((url) => url.pathname.startsWith('/me'), {
         timeout: 30_000,
       });
+      await page.goto('/boards');
       const tile = page.locator('.kairos-board-tile', { hasText: 'Platform Delivery' });
       await expect(tile).toBeVisible();
       // The overview reads the list of the boards. The board view starts

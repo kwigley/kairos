@@ -64,6 +64,7 @@ DATABASE_URL=postgres://kairos:kairos@localhost:41432/kairos \
   KAIROS_SINGLE_TENANT=demo \
   KAIROS_WEB_DIST=crates/kairos-web/dist \
   KAIROS_LOG_FORMAT=pretty \
+  KAIROS_BIND_ADDR=127.0.0.1:41080 \
   cargo run -p kairos-server -- serve
 # → http://localhost:41080  (alice@kairos.test / alice-password)
 ```
@@ -77,10 +78,12 @@ Two dev-stack facts worth knowing (both are deployment config, not code):
   accepts one audience, pick per what you're exercising. Production IdPs
   put one deployment-wide audience on all first-party clients (A-0010),
   so this fork is dev-only.
-- **Any localhost port 8080–8099 works for PKCE (KAIROS-T-0050).** The
-  `kairos-web` client registers `http://localhost:{8080..8099}/callback`,
+- **Any localhost port 41080–41099 works for PKCE (KAIROS-T-0050).** The
+  `kairos-web` client registers `http://localhost:{41080..41099}/callback`,
   so several `kairos-server` instances can each do a real browser PKCE
-  login on their own port concurrently. Dex v2.43.1 exact-matches the
+  login on their own port concurrently. The server listens on
+  `127.0.0.1:8080` by default, which is outside the range: set
+  `KAIROS_BIND_ADDR`. Dex v2.43.1 exact-matches the
   redirect URI (verified: an out-of-range port is rejected at the
   approval step, not at authorize), so stay inside the range. This
   retires the old CDP Fetch-interception / port-queue workarounds the
@@ -165,9 +168,10 @@ crates/kairos-web/
 ```
 
 Routes (in `app.rs`): `/login`, `/callback` (auth, public);
-`/boards`, `/boards/:board` (T-0040), `/items/:code` (T-0041),
-`/search` (T-0042), `/admin` (T-0043), `/activity` (T-0044) — all under
-the protected `Shell` `ParentRoute`; `/` redirects to `/boards`.
+`/me` and `/me/profile` (the personal pages), `/boards`, `/boards/:board`
+(T-0040), `/items/:code` (T-0041), `/search` (T-0042), `/admin` (T-0043),
+`/activity` (T-0044) — all under the protected `Shell` `ParentRoute`; `/`
+redirects to `/me`. The module doc of `app.rs` has the full route map.
 
 Fan-out rules:
 

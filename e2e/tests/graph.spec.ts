@@ -42,9 +42,10 @@ test('graph: badges → canvas → deterministic reload → expand → refocus/b
     await page.fill('#login', 'bob@kairos.test');
     await page.fill('#password', 'bob-password');
     await page.click('#submit-login');
-    await page.waitForURL((url) => url.pathname.startsWith('/boards'), {
+    await page.waitForURL((url) => url.pathname.startsWith('/me'), {
       timeout: 30_000,
     });
+    await page.goto('/boards');
   });
 
   // 2. Board badges + click-through ----------------------------------------

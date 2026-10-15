@@ -20,7 +20,7 @@ async function login(page: Page): Promise<void> {
   await page.fill('#login', 'alice@kairos.test');
   await page.fill('#password', 'alice-password');
   await page.click('#submit-login');
-  await page.waitForURL((url) => url.pathname.startsWith('/boards'), { timeout: 30_000 });
+  await page.waitForURL((url) => url.pathname.startsWith('/me'), { timeout: 30_000 });
 }
 
 test('the server sends the security headers, and the GUI runs under its CSP', async ({ page }) => {
@@ -69,6 +69,7 @@ test('the server sends the security headers, and the GUI runs under its CSP', as
   try {
     await test.step('the pages render with no CSP violation', async () => {
       await login(page);
+      await page.goto('/boards');
       await expect(page.locator('.kairos-board-tile').first()).toBeVisible();
       await page.locator('a[href="/boards/platform-delivery"]').first().click();
       await expect(page.locator('article.kairos-card').first()).toBeVisible();

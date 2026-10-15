@@ -42,7 +42,7 @@ test('team lens: bob → my teams → roster/board/stream → directory → acti
     await page.fill('#login', 'bob@kairos.test');
     await page.fill('#password', 'bob-password');
     await page.click('#submit-login');
-    await page.waitForURL((url) => url.pathname.startsWith('/boards'), {
+    await page.waitForURL((url) => url.pathname.startsWith('/me'), {
       timeout: 30_000,
     });
     const header = page.locator('.cl-appshell__header');
@@ -60,11 +60,12 @@ test('team lens: bob → my teams → roster/board/stream → directory → acti
     await expect(header.getByText('bob', { exact: true })).toBeVisible({
       timeout: 20_000,
     });
-    expect(new URL(page.url()).pathname.startsWith('/boards')).toBe(true);
+    expect(new URL(page.url()).pathname.startsWith('/me')).toBe(true);
   });
 
   // 2. /boards: level bands, delivery grouped by owning team ---------------
   await test.step('boards page shows level bands with team grouping', async () => {
+    await page.goto('/boards');
     const bands = page.locator('.kairos-board-band');
     // strategy, initiative, delivery, adr — all four seeded levels present.
     await expect(bands).toHaveCount(4);

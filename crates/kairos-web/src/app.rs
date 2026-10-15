@@ -7,7 +7,9 @@
 //! |-----------------|----------------------|------------|
 //! | `/login`        | explicit sign-in     | here       |
 //! | `/callback`     | PKCE redirect target | here       |
-//! | `/`             | redirect → `/boards` | here       |
+//! | `/`             | redirect → `/me`     | here       |
+//! | `/me`           | my work, the landing page | here  |
+//! | `/me/profile`   | the person and the settings (`?tab=`) | here |
 //! | `/boards`       | board list           | T-0040     |
 //! | `/boards/:board`| board view           | T-0040     |
 //! | `/items/:code`  | item detail          | T-0041     |
@@ -27,7 +29,7 @@
 //! | `/admin/metadata`  | metadata definitions CRUD | T-0043 |
 //! | `/activity`     | activity feed        | T-0044     |
 //! | `/activity/history/:code` | item content history | T-0044 |
-//! | `/agent-keys`   | the agent keys of the person | T-0359 |
+//! | `/agent-keys`   | redirect → `/me/profile?tab=agent-keys` | T-0359 |
 //!
 //! Everything under the shell is auth-guarded: no session → the guard
 //! *redirects to the issuer* (A-0015 "unauthenticated hits show the login
@@ -74,7 +76,9 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/login") view=pages::LoginPage/>
                 <Route path=path!("/callback") view=pages::CallbackPage/>
                 <ParentRoute path=path!("") view=Shell>
-                    <Route path=path!("") view=|| view! { <Redirect path="/boards"/> }/>
+                    <Route path=path!("") view=|| view! { <Redirect path="/me"/> }/>
+                    <Route path=path!("me") view=pages::MyWorkPage/>
+                    <Route path=path!("me/profile") view=pages::ProfilePage/>
                     <Route path=path!("boards") view=pages::BoardsPage/>
                     <Route path=path!("boards/:board") view=pages::BoardPage/>
                     <Route path=path!("items/:code") view=pages::ItemPage/>
@@ -98,7 +102,7 @@ pub fn App() -> impl IntoView {
                     </ParentRoute>
                     <Route path=path!("activity") view=pages::ActivityPage/>
                     <Route path=path!("activity/history/:code") view=pages::ItemHistoryPage/>
-                    <Route path=path!("agent-keys") view=pages::AgentKeysPage/>
+                    <Route path=path!("agent-keys") view=|| view! { <Redirect path="/me/profile?tab=agent-keys"/> }/>
                     <Route path=path!("notifications") view=pages::NotificationsPage/>
                 </ParentRoute>
             </Routes>
@@ -142,11 +146,11 @@ fn Shell() -> impl IntoView {
                 }.into_any())
                 navbar=Box::new(move || view! {
                     <SideNav>
+                        <NavLink href="/me" label="My work"/>
                         <NavLink href="/boards" label="Boards"/>
                         <NavLink href="/teams" label="Teams"/>
                         <NavLink href="/search" label="Search"/>
                         <NavLink href="/activity" label="Activity"/>
-                        <NavLink href="/agent-keys" label="Agent keys"/>
                         <pages::admin::AdminNavLink/>
                         <DocsSitesNavLink whoami/>
                         <MyTeamsNav whoami/>
@@ -333,7 +337,9 @@ fn WhoamiBadge(whoami: LocalResource<Result<api::Whoami, ApiError>>) -> impl Int
             }.into_any(),
             Some(Ok(me)) => view! {
                 <Group gap="sm">
-                    <Text bright=true size="sm">{me.user.display_name.clone()}</Text>
+                    <a class="kairos-whoami-name" href="/me/profile" title="Your profile and settings">
+                        <Text bright=true size="sm">{me.user.display_name.clone()}</Text>
+                    </a>
                     <Pill color=token::ICE>{me.organization.slug.clone()}</Pill>
                     <Pill color=token::VIOLET>{me.organization.role.clone()}</Pill>
                 </Group>
